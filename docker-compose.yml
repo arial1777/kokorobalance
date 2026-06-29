@@ -1,0 +1,65 @@
+version: '3.9'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    ports:
+      - '4000:4000'
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/kokorobalance
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+      - VERTEX_PROJECT_ID=${VERTEX_PROJECT_ID:-orange-note-dev}
+      - VERTEX_REGION=${VERTEX_REGION:-us-east5}
+      # ADC をホストから引き継ぐ場合は以下のボリュームマウントも追加
+      # - ${APPDATA}/gcloud:/root/.config/gcloud:ro
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID}
+      - FRONTEND_URL=http://localhost:3000
+      - PORT=4000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_DB=kokorobalance
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

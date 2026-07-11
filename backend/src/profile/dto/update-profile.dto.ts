@@ -1,4 +1,4 @@
-import { IsOptional, IsString, Length, Matches } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, Length, Matches } from 'class-validator';
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -9,4 +9,12 @@ export class UpdateProfileDto {
   @IsOptional()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'HH:MM 形式で入力してください' })
   reminderTime?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  suggestionMuted?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  emailReminderEnabled?: boolean;
 }

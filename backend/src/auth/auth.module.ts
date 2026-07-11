@@ -5,6 +5,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtStrategy } from './jwt.strategy';
 import { ProPlanGuard } from './pro-plan.guard';
+import { SupabaseAuthGuard } from './supabase-auth.guard';
+import { DevAuthController } from './dev-auth.controller';
 import { Profile } from '../profile/profile.entity';
 
 @Module({
@@ -19,7 +21,8 @@ import { Profile } from '../profile/profile.entity';
     }),
     TypeOrmModule.forFeature([Profile]),
   ],
-  providers: [JwtStrategy, ProPlanGuard],
-  exports: [JwtStrategy, ProPlanGuard, TypeOrmModule],
+  controllers: [DevAuthController],
+  providers: [JwtStrategy, ProPlanGuard, SupabaseAuthGuard],
+  exports: [JwtStrategy, ProPlanGuard, SupabaseAuthGuard, TypeOrmModule],
 })
 export class AuthModule {}

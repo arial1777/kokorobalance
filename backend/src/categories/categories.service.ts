@@ -26,8 +26,12 @@ export class CategoriesService {
   }
 
   async bulkActivate(userId: string, dto: BulkActivateCategoriesDto): Promise<Category[]> {
+    const existing = await this.categoryRepo.find({ where: { userId } });
+    const existingKeys = new Set(existing.map((c) => `${c.name}::${c.parentName}`));
+
     const presets = await this.presetRepo.findBy({ id: In(dto.presetIds) });
-    const entities = presets.map((p: PresetCategory) =>
+    const newPresets = presets.filter((p) => !existingKeys.has(`${p.name}::${p.parentName}`));
+    const entities = newPresets.map((p: PresetCategory) =>
       this.categoryRepo.create({
         userId,
         name: p.name,
@@ -37,7 +41,8 @@ export class CategoriesService {
         sortOrder: p.sortOrder,
       }),
     );
-    return this.categoryRepo.save(entities);
+    const created = await this.categoryRepo.save(entities);
+    return [...existing.filter((c) => presets.some((p) => `${p.name}::${p.parentName}` === `${c.name}::${c.parentName}`)), ...created];
   }
 
   async create(userId: string, dto: CreateCategoryDto): Promise<Category> {

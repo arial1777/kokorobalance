@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Profile } from '../profile/profile.entity';
 
 @Entity('ai_coach_messages')
@@ -10,6 +10,7 @@ export class AiCoachMessage {
   userId: string;
 
   @ManyToOne(() => Profile, (p) => p.aiCoachMessages, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
   user: Profile;
 
   @Column({ length: 10 })
@@ -17,6 +18,9 @@ export class AiCoachMessage {
 
   @Column({ type: 'text' })
   content: string;
+
+  @Column({ name: 'is_crisis', default: false })
+  isCrisis: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

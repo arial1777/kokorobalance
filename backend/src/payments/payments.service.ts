@@ -7,6 +7,7 @@ import Stripe from 'stripe';
 import { Request } from 'express';
 import { Subscription } from './subscription.entity';
 import { Profile } from '../profile/profile.entity';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class PaymentsService {
@@ -18,6 +19,7 @@ export class PaymentsService {
     private readonly subRepo: Repository<Subscription>,
     @InjectRepository(Profile)
     private readonly profileRepo: Repository<Profile>,
+    private readonly analytics: AnalyticsService,
     config: ConfigService,
   ) {
     this.stripe = new Stripe(config.get<string>('STRIPE_SECRET_KEY')!);
@@ -87,6 +89,10 @@ export class PaymentsService {
       }),
     );
     await this.profileRepo.update(userId, { plan: 'pro' });
+    // KPI: Free→Pro転換（v2 §10.3）
+    await this.analytics.track(userId, 'checkout_completed', {
+      subscriptionId: stripeSub.id,
+    });
   }
 
   private async handleSubscriptionDeleted(sub: Stripe.Subscription): Promise<void> {

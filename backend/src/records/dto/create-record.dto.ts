@@ -1,13 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsInt, IsOptional, IsString, IsUUID, Max, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsIn, IsInt, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 
 export class RecordItemDto {
   @IsUUID()
   categoryId: string;
 
   @IsInt()
-  @Min(-100)
-  @Max(100)
+  @IsIn([1, 2, 3])
   score: number;
 
   @IsOptional()

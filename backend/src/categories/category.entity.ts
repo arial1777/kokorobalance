@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { Profile } from '../profile/profile.entity';
 import { DailyRecordItem } from '../records/daily-record-item.entity';
 
@@ -11,6 +11,7 @@ export class Category {
   userId: string;
 
   @ManyToOne(() => Profile, (p) => p.categories, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
   user: Profile;
 
   @Column({ length: 50 })

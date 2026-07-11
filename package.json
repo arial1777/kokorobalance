@@ -4,8 +4,12 @@
   "private": true,
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "mobile"
   ],
+  "devDependencies": {
+    "tailwindcss": "3.4.19"
+  },
   "scripts": {
     "dev": "docker-compose up",
     "dev:down": "docker-compose down",

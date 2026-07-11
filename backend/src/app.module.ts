@@ -10,6 +10,9 @@ import { PortfolioModule } from './portfolio/portfolio.module';
 import { ReportsModule } from './reports/reports.module';
 import { CoachModule } from './coach/coach.module';
 import { PaymentsModule } from './payments/payments.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -37,6 +40,9 @@ import { PaymentsModule } from './payments/payments.module';
     ReportsModule,
     CoachModule,
     PaymentsModule,
+    OnboardingModule,
+    AnalyticsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

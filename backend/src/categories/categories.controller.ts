@@ -1,10 +1,9 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Request, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+﻿import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Request, UseGuards } from '@nestjs/common';
+import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { CategoriesService } from './categories.service';
 import { BulkActivateCategoriesDto, CreateCategoryDto, UpdateCategoryDto } from './dto/create-category.dto';
 
 @Controller('categories')
-@UseGuards(JwtAuthGuard)
 export class CategoriesController {
   constructor(private readonly service: CategoriesService) {}
 
@@ -14,21 +13,25 @@ export class CategoriesController {
   }
 
   @Get()
+  @UseGuards(SupabaseAuthGuard)
   getCategories(@Request() req: any) {
     return this.service.getUserCategories(req.user.id);
   }
 
   @Post('bulk')
+  @UseGuards(SupabaseAuthGuard)
   bulkActivate(@Request() req: any, @Body() dto: BulkActivateCategoriesDto) {
     return this.service.bulkActivate(req.user.id, dto);
   }
 
   @Post()
+  @UseGuards(SupabaseAuthGuard)
   create(@Request() req: any, @Body() dto: CreateCategoryDto) {
     return this.service.create(req.user.id, dto);
   }
 
   @Patch(':id')
+  @UseGuards(SupabaseAuthGuard)
   update(
     @Request() req: any,
     @Param('id', ParseUUIDPipe) id: string,
@@ -38,6 +41,7 @@ export class CategoriesController {
   }
 
   @Delete(':id')
+  @UseGuards(SupabaseAuthGuard)
   remove(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.remove(req.user.id, id);
   }

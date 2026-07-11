@@ -5,9 +5,10 @@ import { ReportsService } from './reports.service';
 import { ReportsController } from './reports.controller';
 import { PortfolioModule } from '../portfolio/portfolio.module';
 import { Profile } from '../profile/profile.entity';
+import { GeminiModule } from '../common/gemini.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([WeeklyReport, Profile]), PortfolioModule],
+  imports: [TypeOrmModule.forFeature([WeeklyReport, Profile]), PortfolioModule, GeminiModule],
   providers: [ReportsService],
   controllers: [ReportsController],
   exports: [ReportsService],

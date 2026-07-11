@@ -13,6 +13,12 @@ export class Profile {
   @Column({ length: 50, default: '名無し' })
   nickname: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  email: string | null;
+
+  @Column({ name: 'unsubscribe_token', type: 'uuid', generated: 'uuid' })
+  unsubscribeToken: string;
+
   @Column({ length: 20, default: 'free' })
   plan: 'free' | 'pro';
 
@@ -21,6 +27,18 @@ export class Profile {
 
   @Column({ name: 'reminder_time', type: 'time', nullable: true })
   reminderTime: string | null;
+
+  @Column({ name: 'suggestion_muted', default: false })
+  suggestionMuted: boolean;
+
+  @Column({ name: 'ai_consent_at', type: 'timestamptz', nullable: true })
+  aiConsentAt: Date | null;
+
+  @Column({ name: 'email_reminder_enabled', default: true })
+  emailReminderEnabled: boolean;
+
+  @Column({ name: 'expo_push_token', type: 'varchar', length: 255, nullable: true })
+  expoPushToken: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

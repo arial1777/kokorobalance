@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
 import { Profile } from '../profile/profile.entity';
 import { DailyRecordItem } from './daily-record-item.entity';
 
@@ -12,6 +12,7 @@ export class DailyRecord {
   userId: string;
 
   @ManyToOne(() => Profile, (p) => p.dailyRecords, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
   user: Profile;
 
   @Column({ name: 'recorded_date', type: 'date' })

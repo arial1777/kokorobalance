@@ -1,17 +1,21 @@
 import { Body, Controller, Get, Post, Request, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { ProPlanGuard } from '../auth/pro-plan.guard';
+import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { CoachService } from './coach.service';
 import { ChatDto } from './dto/chat.dto';
 
 @Controller('coach')
-@UseGuards(JwtAuthGuard, ProPlanGuard)
+@UseGuards(SupabaseAuthGuard)
 export class CoachController {
   constructor(private readonly service: CoachService) {}
 
   @Get('messages')
   getMessages(@Request() req: any) {
     return this.service.getMessages(req.user.id);
+  }
+
+  @Get('quota')
+  getQuota(@Request() req: any) {
+    return this.service.getQuota(req.user.id);
   }
 
   @Post('chat')

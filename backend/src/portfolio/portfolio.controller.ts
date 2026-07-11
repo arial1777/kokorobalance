@@ -1,9 +1,9 @@
-import { Controller, Get, ParseIntPipe, Query, Request, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+﻿import { Controller, Get, ParseIntPipe, Query, Request, UseGuards } from '@nestjs/common';
+import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { PortfolioService } from './portfolio.service';
 
 @Controller('portfolio')
-@UseGuards(JwtAuthGuard)
+@UseGuards(SupabaseAuthGuard)
 export class PortfolioController {
   constructor(private readonly service: PortfolioService) {}
 

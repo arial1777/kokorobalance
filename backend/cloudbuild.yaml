@@ -1,0 +1,22 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/kokorobalance/backend:$BUILD_ID'
+      - '-f'
+      - 'Dockerfile'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/kokorobalance/backend:$BUILD_ID'
+
+# Cloud Runへのデプロイはここでは行わない。ビルド完了後に
+# `gcloud run deploy` をユーザー自身の認証済みアカウントで実行する
+# （Cloud Buildのデフォルトサービスアカウントに共有プロジェクトへの
+# 追加権限を付与しないため）。
+
+images:
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/kokorobalance/backend:$BUILD_ID'

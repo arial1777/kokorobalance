@@ -21,7 +21,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(error.message ?? 'API error');
+    const err = new Error(error.message ?? 'API error') as Error & { status: number };
+    err.status = res.status;
+    throw err;
   }
 
   if (res.status === 204) return null as T;

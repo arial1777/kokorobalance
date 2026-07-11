@@ -6,7 +6,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     ports:
-      - '3000:3000'
+      - '3002:3000'
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -28,17 +28,24 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - ${APPDATA}/gcloud:/root/.config/gcloud:ro
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/kokorobalance
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+      - SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - NODE_ENV=development
       - VERTEX_PROJECT_ID=${VERTEX_PROJECT_ID:-orange-note-dev}
       - VERTEX_REGION=${VERTEX_REGION:-us-east5}
-      # ADC をホストから引き継ぐ場合は以下のボリュームマウントも追加
-      # - ${APPDATA}/gcloud:/root/.config/gcloud:ro
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash}
+      - GEMINI_PROJECT_ID=${GEMINI_PROJECT_ID}
+      - GEMINI_LOCATION=${GEMINI_LOCATION:-global}
+      - AI_STUB=${AI_STUB:-true}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID}
-      - FRONTEND_URL=http://localhost:3000
+      - FRONTEND_URL=http://localhost:3002
       - PORT=4000
     depends_on:
       db:
@@ -47,7 +54,7 @@ services:
   db:
     image: postgres:16
     ports:
-      - '5432:5432'
+      - '5434:5432'
     environment:
       - POSTGRES_DB=kokorobalance
       - POSTGRES_USER=postgres

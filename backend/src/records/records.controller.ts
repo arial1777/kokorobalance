@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RecordsService } from './records.service';
 import { CreateRecordDto } from './dto/create-record.dto';
+import { CreateFluctuationDto } from './dto/create-fluctuation.dto';
 
 @Controller('records')
-@UseGuards(JwtAuthGuard)
+@UseGuards(SupabaseAuthGuard)
 export class RecordsController {
   constructor(private readonly service: RecordsService) {}
 
@@ -16,6 +17,28 @@ export class RecordsController {
   ) {
     const today = new Date().toISOString().split('T')[0];
     return this.service.getRecords(req.user.id, from ?? '2000-01-01', to ?? today);
+  }
+
+  // 注意: ':date' より先に宣言しないとパスが ':date' に吸われる
+  @Get('fluctuations')
+  getFluctuations(
+    @Request() req: any,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    const today = new Date().toISOString().split('T')[0];
+    return this.service.getFluctuations(req.user.id, from ?? '2000-01-01', to ?? today);
+  }
+
+  @Post('fluctuations')
+  createFluctuation(@Request() req: any, @Body() dto: CreateFluctuationDto) {
+    return this.service.createFluctuation(req.user.id, dto);
+  }
+
+  @Delete('fluctuations/:id')
+  @HttpCode(204)
+  async deleteFluctuation(@Request() req: any, @Param('id') id: string) {
+    await this.service.deleteFluctuation(req.user.id, id);
   }
 
   @Get(':date')

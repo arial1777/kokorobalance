@@ -1,9 +1,23 @@
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
 // expo-secure-store の1アイテムは2048バイトまでという制約があり、
 // Supabaseのセッション(access_token + refresh_token等)はこれを超えることがあるため、
 // 値をチャンク分割して複数キーに保存する。
 const CHUNK_SIZE = 1800;
+
+// expo-secure-storeはWebをサポートしないため、Web版（管理画面プレビュー等）ではlocalStorageに委譲する。
+const WebStorageAdapter = {
+  async getItem(key: string): Promise<string | null> {
+    return globalThis.localStorage?.getItem(key) ?? null;
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    globalThis.localStorage?.setItem(key, value);
+  },
+  async removeItem(key: string): Promise<void> {
+    globalThis.localStorage?.removeItem(key);
+  },
+};
 
 function chunkKey(key: string, index: number): string {
   return `${key}_chunk_${index}`;
@@ -14,7 +28,7 @@ async function getChunkCount(key: string): Promise<number> {
   return raw ? parseInt(raw, 10) : 0;
 }
 
-export const ChunkedSecureStoreAdapter = {
+const NativeSecureStoreAdapter = {
   async getItem(key: string): Promise<string | null> {
     const count = await getChunkCount(key);
     if (count === 0) return null;
@@ -46,3 +60,6 @@ export const ChunkedSecureStoreAdapter = {
     await SecureStore.deleteItemAsync(`${key}_chunk_count`);
   },
 };
+
+export const ChunkedSecureStoreAdapter =
+  Platform.OS === 'web' ? WebStorageAdapter : NativeSecureStoreAdapter;

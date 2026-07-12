@@ -49,7 +49,7 @@ export default function PricingPage() {
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-lg font-bold">Pro</h2>
             <div className="text-right">
-              <span className="text-2xl font-bold">¥980</span>
+              <span className="text-2xl font-bold">¥330</span>
               <span className="text-sm opacity-80">/月</span>
             </div>
           </div>

@@ -220,7 +220,7 @@ export default function LandingPage() {
             <div className="bg-primary text-white rounded-2xl shadow-lg shadow-primary/15 p-6">
               <p className="font-bold mb-1">Pro</p>
               <p className="text-3xl font-bold mb-4">
-                ¥980<span className="text-sm font-normal opacity-70">/月</span>
+                ¥330<span className="text-sm font-normal opacity-70">/月</span>
               </p>
               <ul className="space-y-2 text-sm opacity-90 mb-6">
                 {['Freeの全機能', 'AIコーチ 無制限', '週間レポートのAIコメント'].map((f) => (

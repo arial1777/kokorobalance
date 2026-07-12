@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { getAllPosts } from '@/lib/blog';
+import { getAllCategories, getAllPosts } from '@/lib/blog';
 import { SITE_URL } from '@/lib/utils';
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -19,5 +19,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
-  return [...staticRoutes, ...postRoutes];
+  const categoryRoutes: MetadataRoute.Sitemap = getAllCategories().map((category) => ({
+    url: `${SITE_URL}/blog/category/${encodeURIComponent(category)}`,
+    changeFrequency: 'weekly',
+    priority: 0.5,
+  }));
+
+  return [...staticRoutes, ...postRoutes, ...categoryRoutes];
 }

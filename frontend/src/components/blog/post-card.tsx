@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import type { BlogPost } from '@/lib/blog';
+import { getReadingTime, type BlogPost } from '@/lib/blog-utils';
 
 export function PostCard({ post }: { post: BlogPost }) {
-  const { slug, frontmatter } = post;
+  const { slug, frontmatter, content } = post;
+  const readingTime = getReadingTime(content);
 
   return (
     <Link
@@ -16,6 +17,7 @@ export function PostCard({ post }: { post: BlogPost }) {
             {frontmatter.category}
           </span>
         )}
+        <span>{readingTime}分</span>
       </div>
       <h2 className="text-lg font-bold text-foreground mb-1.5 leading-snug">{frontmatter.title}</h2>
       <p className="text-sm text-muted-foreground leading-relaxed">{frontmatter.description}</p>

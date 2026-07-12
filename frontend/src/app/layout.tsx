@@ -20,6 +20,21 @@ export const metadata: Metadata = {
     '自分の心が何によって支えられているかを可視化し、心の柱を育てて長期的に心を安定させるセルフケア支援アプリ',
 };
 
+const organizationJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'ココロバランス',
+  url: SITE_URL,
+  logo: `${SITE_URL}/icon-512.png`,
+};
+
+const websiteJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'ココロバランス',
+  url: SITE_URL,
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja" className={`${geist.variable} ${notoSansJP.variable}`}>
@@ -27,6 +42,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0"
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
       </head>
       <body className="min-h-screen bg-background text-foreground antialiased font-[var(--font-noto),var(--font-geist),sans-serif]">

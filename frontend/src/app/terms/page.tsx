@@ -39,7 +39,7 @@ export default function TermsPage() {
           <section>
             <h2 className="font-bold mb-2">第4条（有料プラン）</h2>
             <p>
-              Proプラン（月額980円）の決済はStripeを通じて行われます。解約はいつでも設定画面から行うことができ、
+              Proプラン（月額330円）の決済はStripeを通じて行われます。解約はいつでも設定画面から行うことができ、
               解約後も当該請求期間の末日までProプランをご利用いただけます。日割りでの返金は行いません。
             </p>
           </section>

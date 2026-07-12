@@ -1,25 +1,11 @@
 import fs from 'fs'
 import path from 'path'
 import matter from 'gray-matter'
+import type { BlogPost, PostFrontmatter } from './blog-utils'
+
+export * from './blog-utils'
 
 const BLOG_DIR = path.join(process.cwd(), 'content/blog')
-
-export interface PostFrontmatter {
-  title: string
-  description: string
-  date: string
-  updatedDate?: string
-  category?: string
-  tags?: string[]
-  ogImage?: string
-  draft?: boolean
-}
-
-export interface BlogPost {
-  slug: string
-  frontmatter: PostFrontmatter
-  content: string
-}
 
 export function getAllSlugs(): string[] {
   return fs
@@ -46,4 +32,17 @@ export function getAllPosts(): BlogPost[] {
     .map((slug) => getPostBySlug(slug))
     .filter((post): post is BlogPost => post !== null)
     .sort((a, b) => (a.frontmatter.date < b.frontmatter.date ? 1 : -1))
+}
+
+export function getAllCategories(): string[] {
+  const categories = new Set(
+    getAllPosts()
+      .map((post) => post.frontmatter.category)
+      .filter((category): category is string => Boolean(category)),
+  )
+  return Array.from(categories).sort()
+}
+
+export function getPostsByCategory(category: string): BlogPost[] {
+  return getAllPosts().filter((post) => post.frontmatter.category === category)
 }

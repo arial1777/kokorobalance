@@ -11,7 +11,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.kokorobalance.app",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -32,6 +34,13 @@
       "expo-web-browser",
       "expo-sharing",
       "expo-notifications"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "402447e5-8c6f-4562-b4d6-e88cf0736055"
+      }
+    },
+    "owner": "msd1777"
   }
 }

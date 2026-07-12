@@ -1,5 +1,6 @@
-import { Controller, Get, Header, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Header, HttpCode, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
+import { CronAuthGuard } from '../auth/cron-auth.guard';
 
 @Controller('notifications')
 export class NotificationsController {
@@ -16,5 +17,23 @@ export class NotificationsController {
   <h1 style="color: #1A3352;">配信を停止しました</h1>
   <p>リマインドメールの配信を停止しました。<br/>再開はアプリの設定画面からいつでもできます。</p>
 </body></html>`;
+  }
+
+  /** Cloud Schedulerから30分刻みで叩かれる日次リマインドの起動口 */
+  @Post('cron/daily-reminders')
+  @UseGuards(CronAuthGuard)
+  @HttpCode(200)
+  async runDailyReminders(): Promise<{ ok: true }> {
+    await this.service.sendDailyReminders();
+    return { ok: true };
+  }
+
+  /** Cloud Schedulerから毎日19:00 JSTに叩かれる復帰通知の起動口 */
+  @Post('cron/comeback')
+  @UseGuards(CronAuthGuard)
+  @HttpCode(200)
+  async runComeback(): Promise<{ ok: true }> {
+    await this.service.sendComebackEmails();
+    return { ok: true };
   }
 }

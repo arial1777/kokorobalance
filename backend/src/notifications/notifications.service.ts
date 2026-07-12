@@ -1,6 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 
@@ -22,10 +21,11 @@ export class NotificationsService {
   ) {}
 
   /**
-   * 毎日のリマインド（v2 §6）。30分刻みのcronで、
+   * 毎日のリマインド（v2 §6）。Cloud Schedulerから30分刻みで
+   * POST /notifications/cron/daily-reminders を叩いて起動する
+   * （Cloud Runはスケールゼロするため@Cronでの自走はできない）。
    * リマインド時刻が直前30分窓に入ったユーザーのうち当日未記録の人へ送る。
    */
-  @Cron('0,30 * * * *', { timeZone: 'Asia/Tokyo' })
   async sendDailyReminders(): Promise<void> {
     const { today, windowStart, windowEnd } = this.jstNow();
 
@@ -71,10 +71,10 @@ export class NotificationsService {
   }
 
   /**
-   * 復帰メール（v2 §6）。3日以上記録が途切れたユーザーへ週1回まで。
-   * 罪悪感を煽らない「おかえりなさい」トーン。毎日19:00 JSTに判定。
+   * 復帰メール（v2 §6）。Cloud Schedulerから毎日19:00 JSTに
+   * POST /notifications/cron/comeback を叩いて起動する。
+   * 3日以上記録が途切れたユーザーへ週1回まで。罪悪感を煽らない「おかえりなさい」トーン。
    */
-  @Cron('0 19 * * *', { timeZone: 'Asia/Tokyo' })
   async sendComebackEmails(): Promise<void> {
     const { today } = this.jstNow();
 

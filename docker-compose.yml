@@ -47,6 +47,7 @@ services:
       - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID}
       - FRONTEND_URL=http://localhost:3002
       - PORT=4000
+      - CRON_SECRET=${CRON_SECRET}
     depends_on:
       db:
         condition: service_healthy

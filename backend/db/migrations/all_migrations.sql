@@ -267,3 +267,23 @@ ALTER TABLE profiles
 
 CREATE INDEX IF NOT EXISTS idx_profiles_expo_push_token
   ON profiles(expo_push_token) WHERE expo_push_token IS NOT NULL;
+
+-- ============================================================
+-- 014: preset_categories の重複解消 + 一意制約追加
+-- ============================================================
+
+DELETE FROM preset_categories a
+USING preset_categories b
+WHERE a.id > b.id
+  AND a.name = b.name
+  AND a.parent_name = b.parent_name;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'preset_categories_name_parent_unique'
+  ) THEN
+    ALTER TABLE preset_categories
+      ADD CONSTRAINT preset_categories_name_parent_unique UNIQUE (name, parent_name);
+  END IF;
+END $$;

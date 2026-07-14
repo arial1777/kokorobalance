@@ -1,11 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 import { DailyRecord } from './daily-record.entity';
 import { DailyRecordItem } from './daily-record-item.entity';
 import { FluctuationEvent } from './fluctuation-event.entity';
 import { CreateRecordDto } from './dto/create-record.dto';
 import { CreateFluctuationDto } from './dto/create-fluctuation.dto';
+import { Category } from '../categories/category.entity';
 
 export interface RecordFeedback {
   todaysPillars: number;
@@ -26,7 +27,19 @@ export class RecordsService {
     private readonly itemRepo: Repository<DailyRecordItem>,
     @InjectRepository(FluctuationEvent)
     private readonly fluctuationRepo: Repository<FluctuationEvent>,
+    @InjectRepository(Category)
+    private readonly categoryRepo: Repository<Category>,
   ) {}
+
+  /** 他ユーザーのカテゴリIDを記録・揺らぎに紐付けられないようにする */
+  private async assertCategoriesOwned(userId: string, categoryIds: string[]): Promise<void> {
+    const uniqueIds = Array.from(new Set(categoryIds));
+    if (uniqueIds.length === 0) return;
+    const owned = await this.categoryRepo.count({ where: { id: In(uniqueIds), userId } });
+    if (owned !== uniqueIds.length) {
+      throw new ForbiddenException('指定されたカテゴリが見つかりません');
+    }
+  }
 
   async getRecords(userId: string, from: string, to: string): Promise<DailyRecord[]> {
     return this.recordRepo.find({
@@ -44,6 +57,8 @@ export class RecordsService {
   }
 
   async upsert(userId: string, dto: CreateRecordDto): Promise<SaveRecordResult> {
+    await this.assertCategoriesOwned(userId, dto.items.map((i) => i.categoryId));
+
     let record = await this.recordRepo.findOne({
       where: { userId, recordedDate: dto.recordedDate as any },
     });
@@ -118,6 +133,10 @@ export class RecordsService {
   }
 
   async createFluctuation(userId: string, dto: CreateFluctuationDto): Promise<FluctuationEvent> {
+    if (dto.categoryId) {
+      await this.assertCategoriesOwned(userId, [dto.categoryId]);
+    }
+
     const event = this.fluctuationRepo.create({
       userId,
       categoryId: dto.categoryId ?? null,

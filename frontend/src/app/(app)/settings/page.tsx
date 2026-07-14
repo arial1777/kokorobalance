@@ -36,6 +36,8 @@ export default function SettingsPage() {
     mutationFn: (presetId: string) => api.post<Category[]>('/categories/bulk', { presetIds: [presetId] }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
   });
+  const addErrorMessage =
+    addMutation.isError && addMutation.error instanceof Error ? addMutation.error.message : null;
 
   const suggestionMutation = useMutation({
     mutationFn: (suggestionMuted: boolean) => api.patch('/profile', { suggestionMuted }),
@@ -113,6 +115,11 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400 mb-3 leading-relaxed">
               オンボーディングで選ばなかったカテゴリも、あとから追加できます
             </p>
+            {addErrorMessage && (
+              <p className="text-xs text-red-500 mb-3">
+                追加に失敗しました。時間をおいて再度お試しください（{addErrorMessage}）
+              </p>
+            )}
             {Object.entries(groupedAddable).map(([group, ps]) => (
               <div key={group} className="mb-4">
                 <p className="text-xs text-gray-400 mb-2">{group}</p>

@@ -4,6 +4,7 @@ import { In, Repository } from 'typeorm';
 import { Category } from './category.entity';
 import { PresetCategory } from './preset-category.entity';
 import { BulkActivateCategoriesDto, CreateCategoryDto, UpdateCategoryDto } from './dto/create-category.dto';
+import { ProfileService } from '../profile/profile.service';
 
 @Injectable()
 export class CategoriesService {
@@ -12,6 +13,7 @@ export class CategoriesService {
     private readonly categoryRepo: Repository<Category>,
     @InjectRepository(PresetCategory)
     private readonly presetRepo: Repository<PresetCategory>,
+    private readonly profileService: ProfileService,
   ) {}
 
   getPresets(): Promise<PresetCategory[]> {
@@ -25,7 +27,8 @@ export class CategoriesService {
     });
   }
 
-  async bulkActivate(userId: string, dto: BulkActivateCategoriesDto): Promise<Category[]> {
+  async bulkActivate(userId: string, email: string, dto: BulkActivateCategoriesDto): Promise<Category[]> {
+    await this.profileService.findOrCreate(userId, email);
     const existing = await this.categoryRepo.find({ where: { userId } });
     const existingKeys = new Set(existing.map((c) => `${c.name}::${c.parentName}`));
 
@@ -45,7 +48,8 @@ export class CategoriesService {
     return [...existing.filter((c) => presets.some((p) => `${p.name}::${p.parentName}` === `${c.name}::${c.parentName}`)), ...created];
   }
 
-  async create(userId: string, dto: CreateCategoryDto): Promise<Category> {
+  async create(userId: string, email: string, dto: CreateCategoryDto): Promise<Category> {
+    await this.profileService.findOrCreate(userId, email);
     const entity = this.categoryRepo.create({
       userId,
       name: dto.name,

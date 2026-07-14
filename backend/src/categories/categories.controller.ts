@@ -21,13 +21,13 @@ export class CategoriesController {
   @Post('bulk')
   @UseGuards(SupabaseAuthGuard)
   bulkActivate(@Request() req: any, @Body() dto: BulkActivateCategoriesDto) {
-    return this.service.bulkActivate(req.user.id, dto);
+    return this.service.bulkActivate(req.user.id, req.user.email, dto);
   }
 
   @Post()
   @UseGuards(SupabaseAuthGuard)
   create(@Request() req: any, @Body() dto: CreateCategoryDto) {
-    return this.service.create(req.user.id, dto);
+    return this.service.create(req.user.id, req.user.email, dto);
   }
 
   @Patch(':id')

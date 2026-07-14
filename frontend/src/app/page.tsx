@@ -1,8 +1,14 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/icon';
 import { MiniDiagnosis } from '@/components/landing/mini-diagnosis';
 import { Reveal } from '@/components/landing/reveal';
 import { StickyCta } from '@/components/landing/sticky-cta';
+import { SITE_URL } from '@/lib/utils';
+
+export const metadata: Metadata = {
+  alternates: { canonical: SITE_URL },
+};
 
 const SCENARIOS = [
   { icon: 'heart_broken', text: '恋人とうまくいかなかった夜' },

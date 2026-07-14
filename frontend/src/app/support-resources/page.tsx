@@ -1,6 +1,11 @@
 import Link from 'next/link';
+import { SITE_URL } from '@/lib/utils';
 
-export const metadata = { title: '相談窓口 | ココロバランス' };
+export const metadata = {
+  title: '相談窓口 | ココロバランス',
+  description: 'つらい気持ちが続くときに頼れる、無料・匿名で相談できる公的な相談窓口の一覧です。',
+  alternates: { canonical: `${SITE_URL}/support-resources` },
+};
 
 const RESOURCES = [
   {

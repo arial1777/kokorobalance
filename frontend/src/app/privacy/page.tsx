@@ -1,6 +1,11 @@
 import Link from 'next/link';
+import { SITE_URL } from '@/lib/utils';
 
-export const metadata = { title: 'プライバシーポリシー | ココロバランス' };
+export const metadata = {
+  title: 'プライバシーポリシー | ココロバランス',
+  description: 'ココロバランスにおける個人情報の取り扱い方針について説明します。',
+  alternates: { canonical: `${SITE_URL}/privacy` },
+};
 
 // NOTE: 公開前に法務確認を行うこと（web-implementation-plan.md WP7 未決定事項#1）
 export default function PrivacyPage() {

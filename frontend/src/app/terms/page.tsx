@@ -1,6 +1,11 @@
 import Link from 'next/link';
+import { SITE_URL } from '@/lib/utils';
 
-export const metadata = { title: '利用規約 | ココロバランス' };
+export const metadata = {
+  title: '利用規約 | ココロバランス',
+  description: 'ココロバランスのご利用にあたっての利用規約です。',
+  alternates: { canonical: `${SITE_URL}/terms` },
+};
 
 // NOTE: 公開前に法務確認を行うこと（web-implementation-plan.md WP7 未決定事項#1）
 export default function TermsPage() {

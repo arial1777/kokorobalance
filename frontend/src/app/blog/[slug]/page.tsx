@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import { MDXRemote } from 'next-mdx-remote/rsc';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
@@ -128,6 +129,13 @@ export default async function BlogPostPage({ params }: { params: Promise<Params>
       )}
       <BlogHeader />
       <div className="max-w-3xl mx-auto px-4 md:px-8 pt-6 pb-8">
+        <nav aria-label="パンくずリスト" className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3 flex-wrap">
+          <Link href="/" className="hover:text-foreground transition">ホーム</Link>
+          <span aria-hidden="true">/</span>
+          <Link href="/blog" className="hover:text-foreground transition">ブログ</Link>
+          <span aria-hidden="true">/</span>
+          <span className="text-foreground truncate max-w-[16rem]" aria-current="page">{title}</span>
+        </nav>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <time dateTime={date}>{date}</time>
           <span aria-hidden="true">・</span>

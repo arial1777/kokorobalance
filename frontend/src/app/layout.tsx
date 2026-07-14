@@ -13,11 +13,26 @@ const notoSansJP = Noto_Sans_JP({
   display: 'swap',
 });
 
+const SITE_TITLE = 'ココロバランス | 心の支えは、1本より3本。';
+const SITE_DESCRIPTION =
+  '自分の心が何によって支えられているかを可視化し、心の柱を育てて長期的に心を安定させるセルフケア支援アプリ';
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: 'ココロバランス | 心の支えは、1本より3本。',
-  description:
-    '自分の心が何によって支えられているかを可視化し、心の柱を育てて長期的に心を安定させるセルフケア支援アプリ',
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    siteName: 'ココロバランス',
+    locale: 'ja_JP',
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 const organizationJsonLd = {

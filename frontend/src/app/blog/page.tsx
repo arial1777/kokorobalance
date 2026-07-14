@@ -2,12 +2,21 @@ import Link from 'next/link';
 import { getAllCategories, getAllPosts } from '@/lib/blog';
 import { BlogHeader } from '@/components/blog/blog-header';
 import { BlogSearch } from '@/components/blog/blog-search';
+import { SITE_URL } from '@/lib/utils';
 
 export const metadata = {
   title: 'ブログ | ココロバランス',
-  description: 'メンタルヘルス・セルフケアに関する記事をお届けします。',
+  description:
+    'メンタルヘルス・セルフケア・ストレス対処に関する記事をお届けします。心理学や行動科学の知見をもとに、今日から実践できるセルフケアのヒントを紹介します。',
   alternates: {
+    canonical: `${SITE_URL}/blog`,
     types: { 'application/rss+xml': '/blog/feed.xml' },
+  },
+  openGraph: {
+    type: 'website',
+    title: 'ブログ | ココロバランス',
+    description: 'メンタルヘルス・セルフケア・ストレス対処に関する記事をお届けします。',
+    url: `${SITE_URL}/blog`,
   },
 };
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
+import { toast } from '@/store/toast';
 import { Icon } from '@/components/ui/icon';
 import { AppHeader } from '@/components/layout/app-header';
 import type { Profile } from '@/types';
@@ -33,8 +34,13 @@ export default function AccountPage() {
   const deleteMutation = useMutation({
     mutationFn: () => api.delete('/profile'),
     onSuccess: async () => {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut().catch(() => {});
       router.push('/');
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : '削除に失敗しました。時間をおいて再度お試しください',
+      );
     },
   });
 

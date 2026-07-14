@@ -48,6 +48,21 @@ export class PaymentsService {
     return { url: session.url };
   }
 
+  /**
+   * アカウント削除時にStripe側のサブスクリプションも解約する。
+   * これを呼ばずにプロフィールを消すと、DB上の購読記録は消えても
+   * Stripe側の課金は解約されず走り続けてしまう。
+   */
+  async cancelSubscriptionForDeletedUser(userId: string): Promise<void> {
+    const sub = await this.subRepo.findOne({ where: { userId } });
+    if (!sub || sub.status === 'canceled') return;
+    try {
+      await this.stripe.subscriptions.cancel(sub.stripeSubscriptionId);
+    } catch {
+      // Stripe側で既に解約済みなど、解約自体の失敗でアカウント削除を止めない
+    }
+  }
+
   async handleWebhook(req: RawBodyRequest<Request>, sig: string): Promise<void> {
     const secret = process.env.STRIPE_WEBHOOK_SECRET!;
     const event = this.stripe.webhooks.constructEvent(req.rawBody!, sig, secret);

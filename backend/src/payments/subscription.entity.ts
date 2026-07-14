@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Profile } from '../profile/profile.entity';
 
 @Entity('subscriptions')
@@ -10,6 +10,7 @@ export class Subscription {
   userId: string;
 
   @ManyToOne(() => Profile, (p) => p.subscriptions, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
   user: Profile;
 
   @Column({ name: 'stripe_customer_id', length: 100 })

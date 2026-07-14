@@ -10,5 +10,6 @@ import { AnalyticsModule } from '../analytics/analytics.module';
   imports: [TypeOrmModule.forFeature([Subscription, Profile]), AnalyticsModule],
   providers: [PaymentsService],
   controllers: [PaymentsController],
+  exports: [PaymentsService],
 })
 export class PaymentsModule {}

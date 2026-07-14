@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { DataSource, Repository } from 'typeorm';
 import { Profile } from './profile.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { PaymentsService } from '../payments/payments.service';
 
 @Injectable()
 export class ProfileService {
@@ -13,6 +14,7 @@ export class ProfileService {
     @InjectDataSource()
     private readonly ds: DataSource,
     private readonly config: ConfigService,
+    private readonly payments: PaymentsService,
   ) {}
 
   async findOrCreate(userId: string, email: string): Promise<Profile> {
@@ -127,9 +129,12 @@ export class ProfileService {
 
   /**
    * アカウントの完全削除（v2 §7.3）。
-   * Supabase認証ユーザーを先に消し、その後DBデータをCASCADE削除する。
+   * Stripeの定期課金を解約 → Supabase認証ユーザーを削除 → DBデータをCASCADE削除する。
+   * 解約を飛ばして削除すると、DB上の購読記録は消えてもStripe側の課金だけが残り続けてしまう。
    */
   async deleteAccount(userId: string): Promise<void> {
+    await this.payments.cancelSubscriptionForDeletedUser(userId);
+
     const supabaseUrl = this.config.get<string>('SUPABASE_URL');
     const serviceRoleKey = this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY');
 

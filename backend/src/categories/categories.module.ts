@@ -5,9 +5,10 @@ import { PresetCategory } from './preset-category.entity';
 import { CategoriesService } from './categories.service';
 import { CategoriesController } from './categories.controller';
 import { ProfileModule } from '../profile/profile.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Category, PresetCategory]), ProfileModule],
+  imports: [TypeOrmModule.forFeature([Category, PresetCategory]), ProfileModule, AuthModule],
   providers: [CategoriesService],
   controllers: [CategoriesController],
   exports: [CategoriesService, TypeOrmModule],

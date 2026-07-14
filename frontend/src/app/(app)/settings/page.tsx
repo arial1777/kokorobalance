@@ -1,15 +1,38 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type FocusEvent, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
+import { toast } from '@/store/toast';
+import { Icon } from '@/components/ui/icon';
 import type { Category, PresetCategory, Profile } from '@/types';
+
+const CUSTOM_CATEGORY_COLORS = [
+  '#E84393',
+  '#6C5CE7',
+  '#0984E3',
+  '#00B894',
+  '#FDCB6E',
+  '#E17055',
+  '#D63031',
+  '#B2BEC3',
+];
 
 export default function SettingsPage() {
   const router = useRouter();
   const qc = useQueryClient();
+  const [customName, setCustomName] = useState('');
+  const [customParentName, setCustomParentName] = useState('');
+  const [customColor, setCustomColor] = useState(CUSTOM_CATEGORY_COLORS[0]);
+  const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
+
+  function handleGroupFieldBlur(e: FocusEvent<HTMLDivElement>) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setGroupDropdownOpen(false);
+    }
+  }
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['categories'],
@@ -26,32 +49,69 @@ export default function SettingsPage() {
     queryFn: () => api.get<Profile>('/profile'),
   });
 
+  function errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : '通信に失敗しました';
+  }
+
   const toggleMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       api.patch(`/categories/${id}`, { isActive }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
+    onError: (error) => toast.error(errorMessage(error)),
   });
 
   const addMutation = useMutation({
     mutationFn: (presetId: string) => api.post<Category[]>('/categories/bulk', { presetIds: [presetId] }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['categories'] });
+      toast.success('カテゴリを追加しました');
+    },
+    onError: (error) => toast.error(errorMessage(error)),
   });
-  const addErrorMessage =
-    addMutation.isError && addMutation.error instanceof Error ? addMutation.error.message : null;
+
+  const customCategoryMutation = useMutation({
+    mutationFn: (dto: { name: string; parentName: string; color: string }) =>
+      api.post<Category>('/categories', dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['categories'] });
+      toast.success('カテゴリを追加しました');
+      setCustomName('');
+      setCustomParentName('');
+      setCustomColor(CUSTOM_CATEGORY_COLORS[0]);
+      setGroupDropdownOpen(false);
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
 
   const suggestionMutation = useMutation({
     mutationFn: (suggestionMuted: boolean) => api.patch('/profile', { suggestionMuted }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['profile'] });
       qc.invalidateQueries({ queryKey: ['portfolio'] });
+      toast.success('表示設定を更新しました');
     },
+    onError: (error) => toast.error(errorMessage(error)),
   });
 
   const reminderMutation = useMutation({
     mutationFn: (patch: { reminderTime?: string; emailReminderEnabled?: boolean }) =>
       api.patch('/profile', patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['profile'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['profile'] });
+      toast.success('リマインド設定を更新しました');
+    },
+    onError: (error) => toast.error(errorMessage(error)),
   });
+
+  function handleCustomCategorySubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!customName.trim() || !customParentName.trim()) return;
+    customCategoryMutation.mutate({
+      name: customName.trim(),
+      parentName: customParentName.trim(),
+      color: customColor,
+    });
+  }
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -69,6 +129,11 @@ export default function SettingsPage() {
     (acc[p.parentName] ??= []).push(p);
     return acc;
   }, {});
+
+  const parentNameOptions = Array.from(
+    new Set([...categories.map((c) => c.parentName), ...presets.map((p) => p.parentName)]),
+  );
+  const isPro = profile?.plan === 'pro';
 
   return (
     <div className="px-4 pt-6 pb-8">
@@ -115,11 +180,6 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400 mb-3 leading-relaxed">
               オンボーディングで選ばなかったカテゴリも、あとから追加できます
             </p>
-            {addErrorMessage && (
-              <p className="text-xs text-red-500 mb-3">
-                追加に失敗しました。時間をおいて再度お試しください（{addErrorMessage}）
-              </p>
-            )}
             {Object.entries(groupedAddable).map(([group, ps]) => (
               <div key={group} className="mb-4">
                 <p className="text-xs text-gray-400 mb-2">{group}</p>
@@ -141,6 +201,107 @@ export default function SettingsPage() {
             ))}
           </div>
         )}
+
+        {/* カスタムカテゴリ（Pro限定） */}
+        <div>
+          <p className="text-sm font-semibold text-gray-500 mb-3">カスタムカテゴリを追加</p>
+          {isPro ? (
+            <form
+              onSubmit={handleCustomCategorySubmit}
+              className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3"
+            >
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">カテゴリ名</label>
+                <input
+                  type="text"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  maxLength={50}
+                  placeholder="例: 推し活"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                />
+              </div>
+              <div className="relative" onBlur={handleGroupFieldBlur}>
+                <label className="text-xs text-gray-400 mb-1 block">グループ名</label>
+                <div className="flex items-center rounded-lg border border-gray-200 focus-within:border-primary/40">
+                  <input
+                    type="text"
+                    value={customParentName}
+                    onChange={(e) => setCustomParentName(e.target.value)}
+                    onFocus={() => setGroupDropdownOpen(true)}
+                    maxLength={50}
+                    placeholder="例: 趣味（既存から選ぶか、新しく入力）"
+                    className="flex-1 px-3 py-2 text-sm outline-none"
+                  />
+                  {parentNameOptions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setGroupDropdownOpen((o) => !o)}
+                      aria-label="グループ一覧を開く"
+                      className="px-2 text-gray-400"
+                    >
+                      <Icon name="expand_more" className="text-lg" />
+                    </button>
+                  )}
+                </div>
+                {groupDropdownOpen && parentNameOptions.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                    {parentNameOptions.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => {
+                          setCustomParentName(name);
+                          setGroupDropdownOpen(false);
+                        }}
+                        className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block">色</label>
+                <div className="flex flex-wrap gap-2">
+                  {CUSTOM_CATEGORY_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setCustomColor(color)}
+                      aria-label={color}
+                      className={`w-7 h-7 rounded-full transition ${
+                        customColor === color ? 'ring-2 ring-offset-2 ring-indigo-500' : ''
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={customCategoryMutation.isPending || !customName.trim() || !customParentName.trim()}
+                className="w-full py-2.5 rounded-lg bg-indigo-500 text-white text-sm font-semibold disabled:opacity-50"
+              >
+                {customCategoryMutation.isPending ? '追加中...' : 'カテゴリを追加'}
+              </button>
+            </form>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 text-center">
+              <p className="text-sm font-semibold text-foreground mb-1">好きな名前でカテゴリを作れます</p>
+              <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+                Proプランなら、プリセットにない自分だけのカテゴリを自由に追加できます
+              </p>
+              <a
+                href="/pricing"
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-accent text-white text-sm font-semibold rounded-xl hover:bg-[#c94d30] transition shadow-sm shadow-accent/20"
+              >
+                Proプランを見る
+              </a>
+            </div>
+          )}
+        </div>
 
         {/* リマインド */}
         <div>

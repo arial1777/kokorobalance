@@ -1,5 +1,6 @@
 ﻿import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Request, UseGuards } from '@nestjs/common';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
+import { ProPlanGuard } from '../auth/pro-plan.guard';
 import { CategoriesService } from './categories.service';
 import { BulkActivateCategoriesDto, CreateCategoryDto, UpdateCategoryDto } from './dto/create-category.dto';
 
@@ -25,7 +26,7 @@ export class CategoriesController {
   }
 
   @Post()
-  @UseGuards(SupabaseAuthGuard)
+  @UseGuards(SupabaseAuthGuard, ProPlanGuard)
   create(@Request() req: any, @Body() dto: CreateCategoryDto) {
     return this.service.create(req.user.id, req.user.email, dto);
   }

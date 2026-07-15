@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og';
+import { RING_LOGO_DATA_URI } from '@/lib/brand';
 
 export const alt = 'ココロバランス | 心の支えは、1本より3本。';
 export const size = { width: 1200, height: 630 };
@@ -38,16 +39,9 @@ export default async function Image() {
           fontFamily: '"Noto Sans JP"',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              background: '#E05A3A',
-              display: 'flex',
-            }}
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={RING_LOGO_DATA_URI} width={44} height={44} alt="" />
           <span style={{ fontSize: 28, fontWeight: 700, color: '#FAFAF7' }}>{title}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

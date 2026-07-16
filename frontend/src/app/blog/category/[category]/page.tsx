@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { getAllCategories, getPostsByCategory } from '@/lib/blog';
+import { getAllCategories, getPostsByCategory, toSummary } from '@/lib/blog';
 import { SITE_URL } from '@/lib/utils';
 import { BlogHeader } from '@/components/blog/blog-header';
 import { PostCard } from '@/components/blog/post-card';
@@ -53,11 +53,28 @@ export default async function CategoryPage({ params }: { params: Promise<Params>
     ],
   };
 
+  const itemListJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `「${category}」の記事一覧`,
+    url,
+    itemListElement: posts.map((post, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      url: `${SITE_URL}/blog/${post.slug}`,
+      name: post.frontmatter.title,
+    })),
+  };
+
   return (
     <div className="min-h-screen bg-background pb-20">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
       />
       <BlogHeader />
       <div className="max-w-3xl mx-auto px-4 md:px-8 pt-6">
@@ -69,7 +86,7 @@ export default async function CategoryPage({ params }: { params: Promise<Params>
         </h1>
         <div className="space-y-4">
           {posts.map((post) => (
-            <PostCard key={post.slug} post={post} />
+            <PostCard key={post.slug} post={toSummary(post)} />
           ))}
         </div>
       </div>

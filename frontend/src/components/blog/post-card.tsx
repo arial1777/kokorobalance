@@ -1,9 +1,8 @@
 import Link from 'next/link';
-import { getReadingTime, type BlogPost } from '@/lib/blog-utils';
+import type { BlogPostSummary } from '@/lib/blog-utils';
 
-export function PostCard({ post }: { post: BlogPost }) {
-  const { slug, frontmatter, content } = post;
-  const readingTime = getReadingTime(content);
+export function PostCard({ post }: { post: BlogPostSummary }) {
+  const { slug, frontmatter, readingTime } = post;
 
   return (
     <Link

@@ -1,15 +1,29 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Icon } from '@/components/ui/icon';
 import { PostCard } from './post-card';
-import type { BlogPost } from '@/lib/blog-utils';
+import type { BlogPostSummary } from '@/lib/blog-utils';
 
 const ALL_CATEGORY = 'すべて';
 
-export function BlogSearch({ posts }: { posts: BlogPost[] }) {
-  const [query, setQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY);
+export function BlogSearch({ posts }: { posts: BlogPostSummary[] }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [query, setQuery] = useState(() => searchParams.get('q') ?? '');
+  const [activeCategory, setActiveCategory] = useState(() => searchParams.get('category') ?? ALL_CATEGORY);
+
+  // Keeps the search/filter state shareable and restorable via back/forward, without adding a history entry per keystroke.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    if (activeCategory !== ALL_CATEGORY) params.set('category', activeCategory);
+    const queryString = params.toString();
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname, { scroll: false });
+  }, [query, activeCategory, pathname, router]);
 
   const categories = useMemo(() => {
     const set = new Set(posts.map((post) => post.frontmatter.category).filter(Boolean) as string[]);
@@ -44,8 +58,18 @@ export function BlogSearch({ posts }: { posts: BlogPost[] }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="記事を検索"
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-card text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-border bg-card text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            aria-label="検索をクリア"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <Icon name="close" className="text-lg" />
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2 mb-6">
@@ -53,6 +77,7 @@ export function BlogSearch({ posts }: { posts: BlogPost[] }) {
           <button
             key={category}
             type="button"
+            aria-pressed={activeCategory === category}
             onClick={() => setActiveCategory(category)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
               activeCategory === category

@@ -17,19 +17,29 @@ export function BarChart({
   unit?: string;
   caption?: string;
 }) {
+  const summary = data.map((d) => `${d.name} ${d.value}${unit ?? ''}`).join('、');
+
   return (
     <figure className="not-prose my-8">
-      <ResponsiveContainer width="100%" height={260}>
-        <RBarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.905 0.020 70)" vertical={false} />
-          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} unit={unit} />
-          <Tooltip formatter={(value) => [`${value}${unit ?? ''}`, '']} />
-          <Bar dataKey="value" fill={CHART_COLORS.coral} radius={[6, 6, 0, 0]} />
-        </RBarChart>
-      </ResponsiveContainer>
+      <div aria-hidden="true">
+        <ResponsiveContainer width="100%" height={260}>
+          <RBarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.905 0.020 70)" vertical={false} />
+            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+            <YAxis tick={{ fontSize: 12 }} unit={unit} />
+            <Tooltip formatter={(value) => [`${value}${unit ?? ''}`, '']} />
+            <Bar dataKey="value" fill={CHART_COLORS.coral} radius={[6, 6, 0, 0]} />
+          </RBarChart>
+        </ResponsiveContainer>
+      </div>
+      <span className="sr-only">
+        {caption ? `${caption}：` : ''}
+        {summary}
+      </span>
       {caption && (
-        <figcaption className="text-center text-xs text-muted-foreground mt-2">{caption}</figcaption>
+        <figcaption aria-hidden="true" className="text-center text-xs text-muted-foreground mt-2">
+          {caption}
+        </figcaption>
       )}
     </figure>
   );

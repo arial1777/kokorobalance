@@ -29,6 +29,13 @@ export interface BlogPost {
   content: string
 }
 
+/** Listing-page card data, without the raw MDX body — keeps client-component payloads (e.g. search) from carrying every post's full content. */
+export interface BlogPostSummary {
+  slug: string
+  frontmatter: PostFrontmatter
+  readingTime: number
+}
+
 export interface Heading {
   depth: 2 | 3
   text: string
@@ -45,6 +52,10 @@ export function getReadingTime(content: string): number {
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\s+/g, '')
   return Math.max(1, Math.ceil(plain.length / JA_CHARS_PER_MINUTE))
+}
+
+export function toSummary(post: BlogPost): BlogPostSummary {
+  return { slug: post.slug, frontmatter: post.frontmatter, readingTime: getReadingTime(post.content) }
 }
 
 function stripMarkdownInline(text: string): string {

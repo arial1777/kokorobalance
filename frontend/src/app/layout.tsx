@@ -3,7 +3,11 @@ import { Geist } from 'next/font/google';
 import { Noto_Sans_JP } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers';
+import { IconFontLoader } from '@/components/icon-font-loader';
+import { USED_ICON_NAMES } from '@/lib/icon-names';
 import { SITE_URL } from '@/lib/utils';
+
+const ICON_FONT_URL = `https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0&icon_names=${USED_ICON_NAMES.join(',')}&display=swap`;
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist' });
 const notoSansJP = Noto_Sans_JP({
@@ -54,10 +58,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja" className={`${geist.variable} ${notoSansJP.variable}`}>
       <head>
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0"
-        />
+        <noscript>
+          <link rel="stylesheet" href={ICON_FONT_URL} />
+        </noscript>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
@@ -68,6 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="min-h-screen bg-background text-foreground antialiased font-[var(--font-noto),var(--font-geist),sans-serif]">
+        <IconFontLoader href={ICON_FONT_URL} />
         <Providers>{children}</Providers>
       </body>
     </html>

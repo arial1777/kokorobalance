@@ -3,12 +3,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Subscription } from './subscription.entity';
 import { Profile } from '../profile/profile.entity';
 import { PaymentsService } from './payments.service';
+import { RevenuecatService } from './revenuecat.service';
 import { PaymentsController } from './payments.controller';
 import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Subscription, Profile]), AnalyticsModule],
-  providers: [PaymentsService],
+  providers: [PaymentsService, RevenuecatService],
   controllers: [PaymentsController],
   exports: [PaymentsService],
 })

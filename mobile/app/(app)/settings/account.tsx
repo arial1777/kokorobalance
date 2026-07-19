@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Modal } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, Platform, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { api } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
+import { restorePurchases, isProEntitled } from '@/lib/purchases';
+import { toast } from '@/store/toast';
 import { Icon } from '@/components/ui/icon';
 import { AppHeader } from '@/components/ui/app-header';
 import type { Profile } from '@/types';
@@ -17,6 +19,7 @@ export default function AccountPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   const { data: profile } = useQuery<Profile>({
     queryKey: ['profile'],
@@ -54,6 +57,28 @@ export default function AccountPage() {
     }
   }
 
+  async function handleRestore() {
+    setRestoring(true);
+    try {
+      const info = await restorePurchases();
+      if (isProEntitled(info)) {
+        for (let i = 0; i < 5; i++) {
+          await qc.invalidateQueries({ queryKey: ['profile'] });
+          const p = qc.getQueryData<Profile>(['profile']);
+          if (p?.plan === 'pro') break;
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        toast.success('購入を復元しました');
+      } else {
+        toast.error('復元できる購入が見つかりませんでした');
+      }
+    } catch {
+      toast.error('復元に失敗しました。時間をおいて再度お試しください');
+    } finally {
+      setRestoring(false);
+    }
+  }
+
   const displayNickname = nickname ?? profile?.nickname ?? '';
 
   return (
@@ -88,6 +113,35 @@ export default function AccountPage() {
             </Text>
           </View>
         </View>
+
+        {Platform.OS === 'ios' && (
+          <View>
+            <Text className="mb-3 text-sm font-semibold text-muted-foreground">サブスクリプション</Text>
+            <View className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+              {profile?.plan === 'pro' ? (
+                <Pressable
+                  onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
+                  className="flex-row items-center justify-between px-4 py-3"
+                >
+                  <Text className="text-sm text-foreground">サブスクリプションを管理</Text>
+                  <Text className="text-muted-foreground">→</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => router.push('/paywall')}
+                  className="flex-row items-center justify-between px-4 py-3"
+                >
+                  <Text className="text-sm text-foreground">Proにアップグレード</Text>
+                  <Text className="text-muted-foreground">→</Text>
+                </Pressable>
+              )}
+              <View className="border-t border-border" />
+              <Pressable onPress={handleRestore} disabled={restoring} className="flex-row items-center justify-between px-4 py-3">
+                <Text className="text-sm text-foreground">{restoring ? '復元中…' : '購入を復元'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         <View>
           <Text className="mb-3 text-sm font-semibold text-muted-foreground">データ</Text>

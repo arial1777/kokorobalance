@@ -287,3 +287,34 @@ BEGIN
       ADD CONSTRAINT preset_categories_name_parent_unique UNIQUE (name, parent_name);
   END IF;
 END $$;
+
+-- ============================================================
+-- 015: RevenueCat（iOSアプリ内課金）対応
+-- subscriptionsをStripe専用からprovider汎用に拡張する
+-- ============================================================
+
+ALTER TABLE subscriptions
+  ALTER COLUMN stripe_customer_id DROP NOT NULL,
+  ALTER COLUMN stripe_subscription_id DROP NOT NULL,
+  ADD COLUMN IF NOT EXISTS provider VARCHAR(20) NOT NULL DEFAULT 'stripe',
+  ADD COLUMN IF NOT EXISTS revenuecat_original_transaction_id VARCHAR(100),
+  ADD COLUMN IF NOT EXISTS revenuecat_product_id VARCHAR(100);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'subscriptions_provider_check'
+  ) THEN
+    ALTER TABLE subscriptions
+      ADD CONSTRAINT subscriptions_provider_check CHECK (provider IN ('stripe', 'revenuecat'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'subscriptions_revenuecat_original_transaction_id_key'
+  ) THEN
+    ALTER TABLE subscriptions
+      ADD CONSTRAINT subscriptions_revenuecat_original_transaction_id_key UNIQUE (revenuecat_original_transaction_id);
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_user_provider ON subscriptions(user_id, provider);

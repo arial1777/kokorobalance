@@ -78,4 +78,28 @@ describe('Account deletion (e2e)', () => {
     const profileRows = await dataSource.query('SELECT 1 FROM profiles WHERE id = $1', [user.id]);
     expect(profileRows).toHaveLength(0);
   });
+
+  it('RevenueCat(iOS)の購読レコードが残っていても削除処理は失敗しない（Apple側は解約APIを持たないため対象外）', async () => {
+    const user = makeTestUser();
+    createdUserIds.push(user.id);
+
+    await request(app.getHttpServer())
+      .get('/api/profile')
+      .set(authHeaders(user))
+      .expect(200);
+
+    await dataSource.query(
+      `INSERT INTO subscriptions (user_id, provider, revenuecat_original_transaction_id, status, plan)
+       VALUES ($1, 'revenuecat', $2, 'active', 'pro')`,
+      [user.id, `txn_test_dummy_${user.id}`],
+    );
+
+    await request(app.getHttpServer())
+      .delete('/api/profile')
+      .set(authHeaders(user))
+      .expect(204);
+
+    const profileRows = await dataSource.query('SELECT 1 FROM profiles WHERE id = $1', [user.id]);
+    expect(profileRows).toHaveLength(0);
+  });
 });

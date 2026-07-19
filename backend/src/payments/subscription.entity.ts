@@ -13,11 +13,20 @@ export class Subscription {
   @JoinColumn({ name: 'user_id' })
   user: Profile;
 
-  @Column({ name: 'stripe_customer_id', length: 100 })
-  stripeCustomerId: string;
+  @Column({ length: 20, default: 'stripe' })
+  provider: 'stripe' | 'revenuecat';
 
-  @Column({ name: 'stripe_subscription_id', length: 100, unique: true })
-  stripeSubscriptionId: string;
+  @Column({ type: 'varchar', name: 'stripe_customer_id', length: 100, nullable: true })
+  stripeCustomerId: string | null;
+
+  @Column({ type: 'varchar', name: 'stripe_subscription_id', length: 100, unique: true, nullable: true })
+  stripeSubscriptionId: string | null;
+
+  @Column({ type: 'varchar', name: 'revenuecat_original_transaction_id', length: 100, unique: true, nullable: true })
+  revenuecatOriginalTransactionId: string | null;
+
+  @Column({ type: 'varchar', name: 'revenuecat_product_id', length: 100, nullable: true })
+  revenuecatProductId: string | null;
 
   @Column({ length: 30 })
   status: 'active' | 'canceled' | 'past_due' | 'trialing';

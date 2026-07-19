@@ -10,6 +10,7 @@ import {
   Modal,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
+import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { track } from '@/lib/analytics';
@@ -20,6 +21,7 @@ import type { AiCoachMessage, ChatResult, CoachQuota, Profile } from '@/types';
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://kokorobalance.example.com';
 
 export default function CoachPage() {
+  const router = useRouter();
   const qc = useQueryClient();
   const [input, setInput] = useState('');
   const [consentOpen, setConsentOpen] = useState(false);
@@ -154,7 +156,7 @@ export default function CoachPage() {
               Proプランなら回数無制限で、週間レポートのAIコメントも読めます
             </Text>
             <Pressable
-              onPress={() => WebBrowser.openBrowserAsync(`${WEB_URL}/pricing`)}
+              onPress={() => router.push('/paywall')}
               className="rounded-xl bg-accent px-5 py-2.5 shadow-sm"
             >
               <Text className="text-sm font-semibold text-white">Proプランを見る</Text>

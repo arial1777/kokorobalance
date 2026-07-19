@@ -67,6 +67,7 @@ export default function AppLayout() {
       />
       <Tabs.Screen name="coach" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
+      <Tabs.Screen name="paywall" options={{ href: null, tabBarStyle: { display: 'none' } }} />
     </Tabs>
   );
 }

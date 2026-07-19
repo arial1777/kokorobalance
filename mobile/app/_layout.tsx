@@ -10,6 +10,7 @@ import { queryClient } from '@/lib/query-client';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth';
 import { Toaster } from '@/components/ui/toaster';
+import { configurePurchases, loginPurchases, logoutPurchases } from '@/lib/purchases';
 import '@/lib/push-notifications';
 
 function NotificationTapHandler() {
@@ -31,13 +32,21 @@ function AuthBootstrap() {
   const setInitializing = useAuthStore((s) => s.setInitializing);
 
   useEffect(() => {
+    configurePurchases();
+
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user ?? null);
       setInitializing(false);
+      if (data.session?.user) loginPurchases(data.session.user.id).catch(() => {});
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) {
+        loginPurchases(session.user.id).catch(() => {});
+      } else if (event === 'SIGNED_OUT') {
+        logoutPurchases();
+      }
     });
 
     return () => subscription.subscription.unsubscribe();

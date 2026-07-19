@@ -52,10 +52,12 @@ export class PaymentsService {
    * アカウント削除時にStripe側のサブスクリプションも解約する。
    * これを呼ばずにプロフィールを消すと、DB上の購読記録は消えても
    * Stripe側の課金は解約されず走り続けてしまう。
+   * RevenueCat(Apple IAP)経由の購読はApple側の仕様上サーバーから解約できないため対象外
+   * （ユーザーがApple IDの「サブスクリプション」から解約する必要がある）。
    */
   async cancelSubscriptionForDeletedUser(userId: string): Promise<void> {
-    const sub = await this.subRepo.findOne({ where: { userId } });
-    if (!sub || sub.status === 'canceled') return;
+    const sub = await this.subRepo.findOne({ where: { userId, provider: 'stripe' } });
+    if (!sub || sub.status === 'canceled' || !sub.stripeSubscriptionId) return;
     try {
       await this.stripe.subscriptions.cancel(sub.stripeSubscriptionId);
     } catch {

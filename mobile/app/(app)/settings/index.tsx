@@ -293,7 +293,7 @@ export default function SettingsPage() {
                 Proプランなら、プリセットにない自分だけのカテゴリを自由に追加できます
               </Text>
               <Pressable
-                onPress={() => WebBrowser.openBrowserAsync(`${WEB_URL}/pricing`)}
+                onPress={() => router.push('/paywall')}
                 className="rounded-xl bg-accent px-5 py-2.5"
               >
                 <Text className="text-sm font-semibold text-accent-foreground">Proプランを見る</Text>

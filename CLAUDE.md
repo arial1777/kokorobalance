@@ -6,7 +6,7 @@
 - **backend/**: NestJS + TypeORM + PostgreSQL。`src/` 配下にモジュール単位(auth/profile/categories/records/portfolio/reports/coach/payments/analytics/notifications/onboarding/common)。認証はSupabase発行JWTを`SupabaseAuthGuard`で検証。
 - **mobile/**: Expo (managed) + expo-router + nativewind + zustand + TanStack Query。iOS向け。バックエンドAPIはWebと共通(コード変更なし)。画面構成はfrontendとほぼ対応(タブ: home/record/portfolio/report + settings)。
 - **DB**: PostgreSQL。ローカルはDocker、本番はSupabase。認証もSupabase Auth。
-- **決済**: Stripe(Proプラン、AIコーチ機能の課金ゲート)。
+- **決済**: Proプラン(AIコーチ機能の課金ゲート)。Webは Stripe Checkout、iOSアプリは Apple審査ガイドライン3.1.1によりStoreKit経由のApp内課金必須のため RevenueCat を使用。両者とも`backend/src/payments`のWebhookで`profiles.plan`を更新する共通の`subscriptions`テーブルに集約(`provider`カラムで区別)。
 - **AI**: Vertex AI / Gemini(AIコーチ機能)。
 - **ローカル開発**: `docker-compose up` でfrontend/backend/dbの3コンテナ起動(mobileはDocker外、`expo start`で個別起動)。
 

@@ -1,12 +1,16 @@
-﻿import { Controller, Headers, Post, Req, Request, UseGuards } from '@nestjs/common';
+﻿import { Body, Controller, Headers, Post, Req, Request, UseGuards } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { PaymentsService } from './payments.service';
+import { RevenuecatService } from './revenuecat.service';
 
 @Controller('payments')
 export class PaymentsController {
-  constructor(private readonly service: PaymentsService) {}
+  constructor(
+    private readonly service: PaymentsService,
+    private readonly revenuecat: RevenuecatService,
+  ) {}
 
   @Post('create-checkout')
   @UseGuards(SupabaseAuthGuard)
@@ -26,5 +30,10 @@ export class PaymentsController {
     @Headers('stripe-signature') sig: string,
   ) {
     return this.service.handleWebhook(req, sig);
+  }
+
+  @Post('revenuecat-webhook')
+  handleRevenuecatWebhook(@Body() body: any, @Headers('authorization') authHeader: string) {
+    return this.revenuecat.handleWebhook(body, authHeader);
   }
 }

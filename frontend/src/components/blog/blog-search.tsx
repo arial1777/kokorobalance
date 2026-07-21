@@ -1,23 +1,50 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/icon';
 import { PostCard } from './post-card';
 import type { BlogPostSummary } from '@/lib/blog-utils';
 
 const ALL_CATEGORY = 'すべて';
 
+function readParamsFromLocation() {
+  const params = new URLSearchParams(window.location.search);
+  return { q: params.get('q') ?? '', category: params.get('category') ?? ALL_CATEGORY };
+}
+
 export function BlogSearch({ posts }: { posts: BlogPostSummary[] }) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
-  const [query, setQuery] = useState(() => searchParams.get('q') ?? '');
-  const [activeCategory, setActiveCategory] = useState(() => searchParams.get('category') ?? ALL_CATEGORY);
+  // Starts at the same empty/ALL default the server renders — reading window.location during
+  // the initial render (like the old useSearchParams()+Suspense combo did) would either force
+  // this whole subtree out of the prerendered HTML, or mismatch the server markup whenever the
+  // URL had ?q=/?category=. The real values are applied right after mount instead (below).
+  const [query, setQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY);
+  const skipNextUrlWrite = useRef(true);
 
-  // Keeps the search/filter state shareable and restorable via back/forward, without adding a history entry per keystroke.
+  // Applies the real ?q=/?category= once mounted, and keeps state in sync with browser back/forward.
   useEffect(() => {
+    const sync = () => {
+      const { q, category } = readParamsFromLocation();
+      setQuery(q);
+      setActiveCategory(category);
+    };
+    sync();
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, []);
+
+  // Keeps the search/filter state shareable and restorable via back/forward, without adding a
+  // history entry per keystroke. Skipped on the render right after mount so it doesn't clobber
+  // the URL with stale (pre-sync) defaults before the effect above has applied the real values.
+  useEffect(() => {
+    if (skipNextUrlWrite.current) {
+      skipNextUrlWrite.current = false;
+      return;
+    }
     const params = new URLSearchParams();
     if (query) params.set('q', query);
     if (activeCategory !== ALL_CATEGORY) params.set('category', activeCategory);

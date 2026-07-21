@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { Suspense } from 'react';
 import { getAllCategories, getAllPosts, toSummary } from '@/lib/blog';
 import { BlogHeader } from '@/components/blog/blog-header';
 import { BlogSearch } from '@/components/blog/blog-search';
@@ -57,9 +56,7 @@ export default function BlogIndexPage() {
           <p className="text-sm text-muted-foreground">まだ記事がありません。</p>
         ) : (
           <>
-            <Suspense fallback={null}>
-              <BlogSearch posts={posts.map(toSummary)} />
-            </Suspense>
+            <BlogSearch posts={posts.map(toSummary)} />
             <div className="mt-10 pt-6 border-t border-border">
               <p className="text-sm font-bold text-foreground mb-3">カテゴリから探す</p>
               <div className="flex flex-wrap gap-2">

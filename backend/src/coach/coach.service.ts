@@ -11,6 +11,8 @@ import { GeminiService } from '../common/gemini.service';
 
 /** 無料プランの月間チャット回数上限（v2 §5.1.7） */
 export const FREE_MONTHLY_LIMIT = 3;
+/** Proプランの月間チャット回数上限（コスト超過防止のためのソフトキャップ） */
+export const PRO_MONTHLY_LIMIT = 100;
 
 export interface CoachQuota {
   plan: 'free' | 'pro';
@@ -67,14 +69,12 @@ export class CoachService {
     const profile = await this.profileRepo.findOne({ where: { id: userId } });
     const plan = profile?.plan ?? 'free';
     const used = await this.getMonthlyUsage(userId);
-    if (plan === 'pro') {
-      return { plan, limit: null, used, remaining: null };
-    }
+    const limit = plan === 'pro' ? PRO_MONTHLY_LIMIT : FREE_MONTHLY_LIMIT;
     return {
       plan,
-      limit: FREE_MONTHLY_LIMIT,
+      limit,
       used,
-      remaining: Math.max(0, FREE_MONTHLY_LIMIT - used),
+      remaining: Math.max(0, limit - used),
     };
   }
 
@@ -93,12 +93,11 @@ export class CoachService {
       return { reply, messageId, crisis: true };
     }
 
-    // 無料枠チェック（Proは無制限）
-    if (profile.plan !== 'pro') {
-      const used = await this.getMonthlyUsage(userId);
-      if (used >= FREE_MONTHLY_LIMIT) {
-        throw new ForbiddenException('QUOTA_EXCEEDED');
-      }
+    // 月間枠チェック（Proはソフトキャップとして100回/月）
+    const limit = profile.plan === 'pro' ? PRO_MONTHLY_LIMIT : FREE_MONTHLY_LIMIT;
+    const used = await this.getMonthlyUsage(userId);
+    if (used >= limit) {
+      throw new ForbiddenException('QUOTA_EXCEEDED');
     }
 
     const reply = this.isStub

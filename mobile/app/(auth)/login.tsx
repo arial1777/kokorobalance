@@ -6,6 +6,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import Svg, { Path } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { Icon } from '@/components/ui/icon';
+import { toast } from '@/store/toast';
 
 function GoogleLogo() {
   return (
@@ -24,6 +25,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   async function handleLogin() {
     setLoading(true);
@@ -38,16 +40,38 @@ export default function LoginPage() {
   }
 
   async function handleGoogleLogin() {
-    const redirectTo = makeRedirectUri({ scheme: 'kokorobalance', path: 'dashboard' });
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo, skipBrowserRedirect: true },
-    });
-    if (error || !data.url) return;
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    if (result.type === 'success' && result.url) {
-      await supabase.auth.exchangeCodeForSession(result.url);
+    if (googleLoading) return;
+    setGoogleLoading(true);
+    try {
+      const redirectTo = makeRedirectUri({ scheme: 'kokorobalance', path: 'dashboard' });
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
+      if (error || !data.url) {
+        toast.error('Googleログインに失敗しました。もう一度お試しください');
+        return;
+      }
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type !== 'success' || !result.url) return;
+
+      const resultUrl = new URL(result.url);
+      const code = resultUrl.searchParams.get('code');
+      if (!code) {
+        const oauthError = resultUrl.searchParams.get('error_description') ?? resultUrl.searchParams.get('error');
+        console.error('Google login redirect missing code:', oauthError ?? result.url);
+        toast.error(oauthError ?? 'Googleログインに失敗しました。もう一度お試しください');
+        return;
+      }
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      if (exchangeError) {
+        console.error('exchangeCodeForSession failed:', exchangeError.message);
+        toast.error('Googleログインに失敗しました。もう一度お試しください');
+        return;
+      }
       router.replace('/dashboard');
+    } finally {
+      setGoogleLoading(false);
     }
   }
 
@@ -117,10 +141,13 @@ export default function LoginPage() {
 
           <Pressable
             onPress={handleGoogleLogin}
-            className="flex-row items-center justify-center gap-2.5 rounded-xl border border-border bg-white py-3"
+            disabled={googleLoading}
+            className={`flex-row items-center justify-center gap-2.5 rounded-xl border border-border bg-white py-3 ${googleLoading ? 'opacity-50' : ''}`}
           >
             <GoogleLogo />
-            <Text className="text-sm font-medium text-foreground">Googleでログイン</Text>
+            <Text className="text-sm font-medium text-foreground">
+              {googleLoading ? 'ログイン中...' : 'Googleでログイン'}
+            </Text>
           </Pressable>
 
           <View className="mt-8 flex-row justify-center gap-1">

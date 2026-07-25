@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { GoogleAuth } from 'google-auth-library';
 
 export interface GeminiMessage {
   role: 'user' | 'assistant';
@@ -8,13 +9,14 @@ export interface GeminiMessage {
 
 @Injectable()
 export class GeminiService {
-  private readonly apiKey: string;
   private readonly model: string;
   private readonly projectId: string;
   private readonly location: string;
+  // Vertex AI の generateContent は API キーでなく OAuth2 を要求するため、
+  // ADC(ローカルは gcloud auth application-default login、Cloud Runはアタッチされたサービスアカウント)経由でトークンを取得する
+  private readonly auth = new GoogleAuth({ scopes: 'https://www.googleapis.com/auth/cloud-platform' });
 
   constructor(config: ConfigService) {
-    this.apiKey = config.get<string>('GEMINI_API_KEY') ?? '';
     this.model = config.get<string>('GEMINI_MODEL') ?? 'gemini-3.5-flash';
     this.projectId = config.get<string>('GEMINI_PROJECT_ID') ?? '';
     this.location = config.get<string>('GEMINI_LOCATION') ?? 'global';
@@ -22,11 +24,15 @@ export class GeminiService {
 
   async generate(systemPrompt: string, messages: GeminiMessage[]): Promise<string> {
     const host = this.location === 'global' ? 'aiplatform.googleapis.com' : `${this.location}-aiplatform.googleapis.com`;
-    const url = `https://${host}/v1/projects/${this.projectId}/locations/${this.location}/publishers/google/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const url = `https://${host}/v1/projects/${this.projectId}/locations/${this.location}/publishers/google/models/${this.model}:generateContent`;
+    const accessToken = await this.auth.getAccessToken();
 
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
         contents: messages.map((m) => ({

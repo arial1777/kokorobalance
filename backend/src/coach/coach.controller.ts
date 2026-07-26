@@ -22,4 +22,9 @@ export class CoachController {
   chat(@Request() req: any, @Body() dto: ChatDto) {
     return this.service.chat(req.user.id, dto.message);
   }
+
+  @Post('reset')
+  resetThread(@Request() req: any) {
+    return this.service.resetThread(req.user.id);
+  }
 }

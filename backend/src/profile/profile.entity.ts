@@ -34,6 +34,9 @@ export class Profile {
   @Column({ name: 'ai_consent_at', type: 'timestamptz', nullable: true })
   aiConsentAt: Date | null;
 
+  @Column({ name: 'coach_thread_reset_at', type: 'timestamptz', nullable: true })
+  coachThreadResetAt: Date | null;
+
   @Column({ name: 'email_reminder_enabled', default: true })
   emailReminderEnabled: boolean;
 

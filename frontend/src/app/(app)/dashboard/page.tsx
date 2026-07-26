@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { todayJST } from '@/lib/utils';
+import { activeDayJST } from '@/lib/utils';
 import { PortfolioPie } from '@/components/charts/portfolio-pie';
 import { Icon } from '@/components/ui/icon';
 import { AppHeader } from '@/components/layout/app-header';
@@ -16,7 +16,7 @@ const STAGE_META: Record<PillarStage, { emoji: string; label: string }> = {
 };
 
 export default function DashboardPage() {
-  const today = todayJST();
+  const today = activeDayJST();
 
   const { data: todayRecord } = useQuery<DailyRecord | null>({
     queryKey: ['record', today],

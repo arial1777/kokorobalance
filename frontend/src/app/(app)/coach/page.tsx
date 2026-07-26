@@ -61,6 +61,14 @@ export default function CoachPage() {
     },
   });
 
+  const resetMutation = useMutation({
+    mutationFn: () => api.post('/coach/reset'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['coach-messages'] });
+      track('coach_thread_reset');
+    },
+  });
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -79,17 +87,32 @@ export default function CoachPage() {
   const isFree = quota?.plan !== 'pro';
   const exhausted = isFree && quota?.remaining === 0;
 
-  const headerRight = quota ? (
-    isFree ? (
-      <span className="text-[11px] font-semibold bg-secondary text-muted-foreground rounded-full px-2.5 py-1">
-        今月あと{quota.remaining}回
-      </span>
-    ) : (
-      <span className="text-[11px] font-semibold bg-accent/10 text-accent rounded-full px-2.5 py-1">
-        Pro
-      </span>
-    )
-  ) : undefined;
+  const headerRight = (
+    <div className="flex items-center gap-2">
+      {quota &&
+        (isFree ? (
+          <span className="text-[11px] font-semibold bg-secondary text-muted-foreground rounded-full px-2.5 py-1">
+            今月あと{quota.remaining}回
+          </span>
+        ) : (
+          <span className="text-[11px] font-semibold bg-accent/10 text-accent rounded-full px-2.5 py-1">
+            Pro
+          </span>
+        ))}
+      {messages.length > 0 && (
+        <button
+          type="button"
+          onClick={() => resetMutation.mutate()}
+          disabled={resetMutation.isPending}
+          aria-label="新しい会話を始める"
+          title="新しい会話を始める"
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-secondary transition text-muted-foreground disabled:opacity-40"
+        >
+          <Icon name="refresh" className="text-lg" />
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -199,7 +222,7 @@ export default function CoachPage() {
             </div>
             <h2 className="text-lg font-bold text-foreground mb-2">AIコーチを始める前に</h2>
             <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-              AIコーチとの会話内容と、あなたの心のデータ（ポートフォリオ・柱・揺らぎ）は、応答生成のためにAI（Google Cloud上のClaude）へ送信されます。
+              AIコーチとの会話内容と、あなたの心のデータ（ポートフォリオ・柱・揺らぎ）は、応答生成のためにAI（Google Cloud上のGemini）へ送信されます。
             </p>
             <ul className="text-xs text-muted-foreground space-y-1.5 mb-5 leading-relaxed">
               <li>・データが広告や第三者提供に使われることはありません</li>

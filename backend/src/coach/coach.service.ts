@@ -1,6 +1,6 @@
 import { ForbiddenException, HttpException, Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, MoreThanOrEqual, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AiCoachMessage } from './ai-coach-message.entity';
 import { AiUsage } from './ai-usage.entity';
@@ -57,12 +57,35 @@ export class CoachService {
     this.isStub = config.get<string>('AI_STUB') !== 'false';
   }
 
-  getMessages(userId: string): Promise<AiCoachMessage[]> {
+  async getMessages(userId: string): Promise<AiCoachMessage[]> {
+    const since = await this.threadSince(userId);
     return this.messageRepo.find({
-      where: { userId },
+      where: { userId, createdAt: MoreThanOrEqual(since) },
       order: { createdAt: 'ASC' },
       take: 50,
     });
+  }
+
+  /** 表示中スレッドを新規開始扱いにする（履歴はai_coach_messagesに残したまま、以降の取得だけリセットする） */
+  async resetThread(userId: string): Promise<{ resetAt: string }> {
+    const now = new Date();
+    await this.profileRepo.update(userId, { coachThreadResetAt: now });
+    return { resetAt: now.toISOString() };
+  }
+
+  /** 4時始まりの「今日」の開始時刻（UTC instant）。深夜〜3:59は前日のスレッドとして扱う */
+  private activeDayBoundary(): Date {
+    const shifted = new Date(Date.now() - 4 * 60 * 60 * 1000);
+    const activeDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(shifted);
+    return new Date(`${activeDate}T04:00:00+09:00`);
+  }
+
+  /** 表示・AIへの会話履歴に含める起点（日次の自動リセットと手動リセットの遅い方） */
+  private async threadSince(userId: string): Promise<Date> {
+    const boundary = this.activeDayBoundary();
+    const profile = await this.profileRepo.findOne({ where: { id: userId } });
+    const manualReset = profile?.coachThreadResetAt ?? null;
+    return manualReset && manualReset > boundary ? manualReset : boundary;
   }
 
   async getQuota(userId: string): Promise<CoachQuota> {
@@ -168,8 +191,9 @@ export class CoachService {
        LIMIT 5`,
       [userId],
     );
+    const since = await this.threadSince(userId);
     const history = await this.messageRepo.find({
-      where: { userId },
+      where: { userId, createdAt: MoreThanOrEqual(since) },
       order: { createdAt: 'DESC' },
       take: 10,
     });

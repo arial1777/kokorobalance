@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { track } from '@/lib/analytics';
-import { todayJST } from '@/lib/utils';
+import { activeDayJST } from '@/lib/utils';
 import { Icon } from '@/components/ui/icon';
 import { AppHeader } from '@/components/layout/app-header';
 import type {
@@ -40,7 +40,7 @@ const MAGNITUDE_LABEL: Record<FluctuationMagnitude, string> = {
 export default function RecordPage() {
   const router = useRouter();
   const qc = useQueryClient();
-  const today = todayJST();
+  const today = activeDayJST();
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['categories'],

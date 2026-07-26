@@ -10,4 +10,10 @@ export function todayJST(): string {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date())
 }
 
+/** 4時始まりの「今日」（YYYY-MM-DD）。深夜0時〜3:59は前日として扱う。記録・AIコーチの日次リセット用 */
+export function activeDayJST(): string {
+  const shifted = new Date(Date.now() - 4 * 60 * 60 * 1000)
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(shifted)
+}
+
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'

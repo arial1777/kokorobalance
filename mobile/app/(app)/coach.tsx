@@ -73,6 +73,14 @@ export default function CoachPage() {
     },
   });
 
+  const resetMutation = useMutation({
+    mutationFn: () => api.post('/coach/reset'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['coach-messages'] });
+      track('coach_thread_reset');
+    },
+  });
+
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [messages, chatMutation.isPending]);
@@ -97,17 +105,27 @@ export default function CoachPage() {
         title="AIコーチ"
         subtitle="心のバランス相談"
         right={
-          quota ? (
-            isFree ? (
-              <View className="rounded-full bg-secondary px-2.5 py-1">
-                <Text className="text-[11px] font-semibold text-muted-foreground">今月あと{quota.remaining}回</Text>
-              </View>
-            ) : (
-              <View className="rounded-full bg-accent/10 px-2.5 py-1">
-                <Text className="text-[11px] font-semibold text-accent">Pro</Text>
-              </View>
-            )
-          ) : undefined
+          <View className="flex-row items-center gap-2">
+            {quota &&
+              (isFree ? (
+                <View className="rounded-full bg-secondary px-2.5 py-1">
+                  <Text className="text-[11px] font-semibold text-muted-foreground">今月あと{quota.remaining}回</Text>
+                </View>
+              ) : (
+                <View className="rounded-full bg-accent/10 px-2.5 py-1">
+                  <Text className="text-[11px] font-semibold text-accent">Pro</Text>
+                </View>
+              ))}
+            {messages.length > 0 && (
+              <Pressable
+                onPress={() => resetMutation.mutate()}
+                disabled={resetMutation.isPending}
+                className={`h-8 w-8 items-center justify-center rounded-full active:bg-secondary ${resetMutation.isPending ? 'opacity-40' : ''}`}
+              >
+                <Icon name="refresh" size={18} color="#6B5848" />
+              </Pressable>
+            )}
+          </View>
         }
       />
 
@@ -204,7 +222,7 @@ export default function CoachPage() {
             <Text className="mb-2 text-lg font-bold text-foreground">AIコーチを始める前に</Text>
             <Text className="mb-4 text-sm leading-relaxed text-muted-foreground">
               AIコーチとの会話内容と、あなたの心のデータ（ポートフォリオ・柱・揺らぎ）は、応答生成のためにAI（Google
-              Cloud上のClaude）へ送信されます。
+              Cloud上のGemini）へ送信されます。
             </Text>
             <View className="mb-5 gap-1.5">
               <Text className="text-xs leading-relaxed text-muted-foreground">

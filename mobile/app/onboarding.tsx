@@ -347,7 +347,8 @@ export default function OnboardingPage() {
                           setOshiAsking(true);
                           return;
                         }
-                        setLabelInput(c);
+                        // 習慣の候補チップと同じく、タップした時点で即座に追加する（P-10の自由入力は下の欄で行える）
+                        addDraft(c, 'place');
                       }}
                       className="rounded-full border-2 border-border bg-white px-3.5 py-2"
                     >

@@ -119,9 +119,15 @@ export default function LandingPage() {
             支えがひとつだけだと、<br className="md:hidden" />
             それが揺れたとき心ごと揺れてしまう。
           </p>
+          {/*
+            「◯本あれば大丈夫」という数の保証はしない（07 §6）。
+            本数と強さを結びつける主張は self-complexity 緩衝仮説そのもので再現に失敗している（E-01/E-02）。
+            効いているのは数ではなく「他者から承認された居場所・相手」（E-03/E-04/E-05）。
+            キャッチコピー「1本より3本」はブランドメッセージとして残すが、断定はしない（07 §3.5）。
+          */}
           <p className="text-lg md:text-xl font-bold text-primary leading-relaxed mt-2">
-            柱が3本あれば、<br className="md:hidden" />
-            1本が揺れても立っていられる。
+            頼れる先が、ほかにもあると、<br className="md:hidden" />
+            揺れた日に助けになる。
           </p>
         </section>
       </Reveal>
@@ -168,16 +174,16 @@ export default function LandingPage() {
         </section>
       </Reveal>
 
-      {/* AIコーチ */}
+      {/* 壁打ち */}
       <Reveal>
         <section className="max-w-3xl mx-auto px-4 md:px-8 py-12">
           <div className="text-center mb-6">
             <div className="inline-flex items-center gap-2 mb-2">
               <Icon name="smart_toy" filled className="text-xl text-primary" />
-              <h3 className="text-xl md:text-2xl font-bold text-foreground">AIコーチ</h3>
+              <h3 className="text-xl md:text-2xl font-bold text-foreground">壁打ち</h3>
             </div>
             <p className="text-sm text-muted-foreground">
-              あなたのデータを見ながら、具体的な一歩を提案します
+              考えを整理したいとき、そばで話を聞く相手です
             </p>
           </div>
           <div className="bg-white rounded-2xl border border-border shadow-sm p-5 max-w-md mx-auto space-y-3">
@@ -188,12 +194,12 @@ export default function LandingPage() {
             </div>
             <div className="flex justify-start">
               <div className="bg-secondary text-foreground text-sm px-4 py-2.5 rounded-2xl rounded-bl-sm max-w-[85%] leading-relaxed">
-                夢中になれるものがあるのは素敵なことです。データを見ると「友達」の柱がすこし細くなっています。今週、誰かひとりに連絡してみませんか？
+                夢中になれるものがあるのは素敵なことですね。それについて、もう少し聞かせてもらえますか？
               </div>
             </div>
           </div>
           <p className="text-center text-xs text-muted-foreground mt-4">
-            無料プランで月3回まで。Proなら無制限で話せます
+            無料プランは1日1往復まで。Proならいつでも話せます
           </p>
         </section>
       </Reveal>
@@ -209,7 +215,7 @@ export default function LandingPage() {
                 ¥0<span className="text-sm font-normal text-muted-foreground">/月</span>
               </p>
               <ul className="space-y-2 text-sm text-muted-foreground mb-6">
-                {['10秒記録・揺らぎ記録', '心のポートフォリオ・柱', '育成提案', '週間レポート（基本）', 'AIコーチ 月3回'].map((f) => (
+                {['週次点検', '柱（居場所・相手・習慣）', '揺れ予報', '週間レポート（基本）', '壁打ち 1日1往復'].map((f) => (
                   <li key={f} className="flex items-center gap-2">
                     <Icon name="check" className="text-base text-primary" />
                     {f}
@@ -229,7 +235,7 @@ export default function LandingPage() {
                 ¥330<span className="text-sm font-normal opacity-70">/月</span>
               </p>
               <ul className="space-y-2 text-sm opacity-90 mb-6">
-                {['Freeの全機能', 'AIコーチ 無制限', '週間レポートのAIコメント'].map((f) => (
+                {['Freeの全機能', '壁打ち いつでも', '週間レポートのひとこと', '揺れの前の整理'].map((f) => (
                   <li key={f} className="flex items-center gap-2">
                     <Icon name="check" className="text-base text-white" />
                     {f}

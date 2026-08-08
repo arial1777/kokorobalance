@@ -1,18 +1,23 @@
 import { randomUUID } from 'crypto';
-import { Test } from '@nestjs/testing';
+import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
 import { SupabaseAuthGuard } from '../../src/auth/supabase-auth.guard';
 import { FakeAuthGuard } from './fake-auth-guard';
 
-export async function createTestApp(): Promise<{ app: INestApplication; dataSource: DataSource }> {
-  const moduleFixture = await Test.createTestingModule({
+export async function createTestApp(
+  configure?: (builder: TestingModuleBuilder) => TestingModuleBuilder,
+): Promise<{ app: INestApplication; dataSource: DataSource }> {
+  let builder = Test.createTestingModule({
     imports: [AppModule],
   })
     .overrideGuard(SupabaseAuthGuard)
-    .useClass(FakeAuthGuard)
-    .compile();
+    .useClass(FakeAuthGuard);
+  if (configure) {
+    builder = configure(builder);
+  }
+  const moduleFixture = await builder.compile();
 
   const app = moduleFixture.createNestApplication();
   app.setGlobalPrefix('api');

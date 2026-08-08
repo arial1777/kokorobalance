@@ -28,9 +28,6 @@ export class Profile {
   @Column({ name: 'reminder_time', type: 'time', nullable: true })
   reminderTime: string | null;
 
-  @Column({ name: 'suggestion_muted', default: false })
-  suggestionMuted: boolean;
-
   @Column({ name: 'ai_consent_at', type: 'timestamptz', nullable: true })
   aiConsentAt: Date | null;
 
@@ -42,6 +39,21 @@ export class Profile {
 
   @Column({ name: 'expo_push_token', type: 'varchar', length: 255, nullable: true })
   expoPushToken: string | null;
+
+  @Column({ name: 'safety_review_opt_out', default: false })
+  safetyReviewOptOut: boolean;
+
+  /** 柱の再定義（07）の移行通知を閉じた時刻。null なら未表示 */
+  @Column({ name: 'pillar_notice_dismissed_at', type: 'timestamptz', nullable: true })
+  pillarNoticeDismissedAt: Date | null;
+
+  /** 確かな柱0件のまま4回点検した人への静かな提示（06 §5.2）を出した時刻。1回だけ */
+  @Column({ name: 'zero_pillar_nudge_sent_at', type: 'timestamptz', nullable: true })
+  zeroPillarNudgeSentAt: Date | null;
+
+  /** 分析イベントの記録を止める（11 ME-05）。セーフティの検知はこの対象外 */
+  @Column({ name: 'analytics_opt_out', default: false })
+  analyticsOptOut: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

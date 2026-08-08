@@ -101,12 +101,22 @@ export class RevenuecatService {
     record.status = event.period_type === 'TRIAL' ? 'trialing' : 'active';
     record.currentPeriodStart = event.purchased_at_ms ? new Date(event.purchased_at_ms) : record.currentPeriodStart;
     record.currentPeriodEnd = event.expiration_at_ms ? new Date(event.expiration_at_ms) : null;
+    record.planInterval = this.intervalOf(record.revenuecatProductId);
     await this.subRepo.save(record);
     await this.profileRepo.update(event.app_user_id, { plan: 'pro' });
     await this.analytics.track(event.app_user_id, 'checkout_completed', {
       provider: 'revenuecat',
       eventType: event.type,
+      interval: record.planInterval,
     });
+  }
+
+  /**
+   * 年額比率（10 §5）の集計用。RevenueCatのイベントには請求周期が入らないので
+   * プロダクトIDの命名から判定する（例: kokorobalance_pro_annual）。
+   */
+  private intervalOf(productId: string | null): 'month' | 'annual' {
+    return productId && /annual|year|yearly/i.test(productId) ? 'annual' : 'month';
   }
 
   private async markPastDue(event: RevenuecatEvent): Promise<void> {

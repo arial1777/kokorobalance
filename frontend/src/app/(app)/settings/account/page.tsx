@@ -17,6 +17,7 @@ export default function AccountPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [openingPortal, setOpeningPortal] = useState(false);
 
   const { data: profile } = useQuery<Profile>({
     queryKey: ['profile'],
@@ -60,6 +61,19 @@ export default function AccountPage() {
     }
   }
 
+  /** Stripeのカスタマーポータルを開く。解約もここから行える（M-A-10） */
+  async function handleOpenPortal() {
+    setOpeningPortal(true);
+    try {
+      const { url } = await api.post<{ url: string }>('/payments/portal');
+      window.location.href = url;
+    } catch {
+      toast.error('お支払い情報が見つかりませんでした');
+    } finally {
+      setOpeningPortal(false);
+    }
+  }
+
   const displayNickname = nickname ?? profile?.nickname ?? '';
 
   return (
@@ -95,6 +109,33 @@ export default function AccountPage() {
           </div>
         </div>
 
+        {/* 解約について（10-pricing-b2b.md M-A-10）。手順を隠さない */}
+        <div>
+          <p className="text-sm font-semibold text-gray-500 mb-3">解約について</p>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3">
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1">Webから登録した場合</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                下のお支払い管理から、いつでも解約できます。解約後も、契約期間の終わりまでは Pro のままです。
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1">iPhoneアプリから登録した場合</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                iPhoneの「設定」＞ Apple ID ＞「サブスクリプション」から解約してください。
+                Appleの仕組み上、アプリ側からは解約できません。
+              </p>
+            </div>
+            <button
+              onClick={handleOpenPortal}
+              disabled={openingPortal}
+              className="w-full py-2.5 rounded-lg border border-border text-sm font-semibold text-foreground disabled:opacity-50"
+            >
+              {openingPortal ? '開いています…' : 'お支払いを管理する'}
+            </button>
+          </div>
+        </div>
+
         {/* データ */}
         <div>
           <p className="text-sm font-semibold text-gray-500 mb-3">データ</p>
@@ -112,7 +153,7 @@ export default function AccountPage() {
             </button>
           </div>
           <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-            記録・診断・レポート・AIコーチの会話履歴をダウンロードできます
+            記録・診断・レポート・壁打ちの会話履歴をダウンロードできます
           </p>
         </div>
 

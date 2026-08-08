@@ -1,9 +1,10 @@
-﻿import { Body, Controller, Headers, Post, Req, Request, UseGuards } from '@nestjs/common';
+﻿import { Body, Controller, Get, Headers, Post, Req, Request, UseGuards } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { PaymentsService } from './payments.service';
 import { RevenuecatService } from './revenuecat.service';
+import { CreateCheckoutDto } from './dto/create-checkout.dto';
 
 @Controller('payments')
 export class PaymentsController {
@@ -12,10 +13,16 @@ export class PaymentsController {
     private readonly revenuecat: RevenuecatService,
   ) {}
 
+  /** 購入できるプラン。年額のPriceが未設定なら年額導線を出さない */
+  @Get('plans')
+  getPlans() {
+    return this.service.getPlans();
+  }
+
   @Post('create-checkout')
   @UseGuards(SupabaseAuthGuard)
-  createCheckout(@Request() req: any) {
-    return this.service.createCheckoutSession(req.user.id, req.user.email);
+  createCheckout(@Request() req: any, @Body() dto: CreateCheckoutDto) {
+    return this.service.createCheckoutSession(req.user.id, req.user.email, dto.interval);
   }
 
   @Post('portal')

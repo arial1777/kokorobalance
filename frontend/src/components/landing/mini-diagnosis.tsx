@@ -3,13 +3,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { LandingPie, type LandingPieDatum } from './landing-pie';
-import {
-  BALANCED_PILLARS,
-  BALANCED_TOP_SHARE,
-  FEW_PILLARS_THRESHOLD,
-  LANDING_CHIPS,
-  TOP_SHARE_THRESHOLD,
-} from './landing-data';
+import { FEW_PILLARS_THRESHOLD, LANDING_CHIPS, TOP_SHARE_THRESHOLD } from './landing-data';
 import { saveLpDiagnosis } from '@/lib/lp-diagnosis';
 
 type Level = 1 | 2 | 3;
@@ -40,21 +34,22 @@ function toBreakdown(levels: Record<string, Level>): LandingPieDatum[] {
     .sort((a, b) => b.value - a.value);
 }
 
+/**
+ * 支えの形についてのひとこと。
+ * 本数・目標値・「バランス」は使わない（07-spec-pillars.md §3.5 P-04/§6、02 の使用禁止語）。
+ * 「◯本あれば大丈夫」という数の保証は、self-complexity 緩衝仮説そのもので裏付けがない。
+ */
 function buildInsight(data: LandingPieDatum[]): string | null {
   if (data.length === 0) return null;
   const top = data[0];
-  const pillarCount = data.length;
 
   if (top.value >= TOP_SHARE_THRESHOLD) {
-    return `いま、あなたの心は「${top.name}」が${top.value}%を支えています。もしそれが揺らいだら…？`;
+    return `いま、あなたの心は「${top.name}」が大きく支えてくれているようですね。それが揺れる日には、どうしていますか？`;
   }
-  if (pillarCount <= FEW_PILLARS_THRESHOLD) {
-    return `柱は${pillarCount}本。もう1本あると、心はぐっと安定します。`;
+  if (data.length <= FEW_PILLARS_THRESHOLD) {
+    return `「${top.name}」が支えになっているんですね。ほかにも頼れる先があると、揺れた日に助けになります。`;
   }
-  if (pillarCount >= BALANCED_PILLARS && top.value < BALANCED_TOP_SHARE) {
-    return `${pillarCount}本の柱でバランスよく支えられています。記録で育てていきましょう。`;
-  }
-  return `${pillarCount}本の柱があなたを支えています。この形、キープできそうですか？`;
+  return `いくつかの支えに、うまく分かれているようです。この形、しっくりきていますか？`;
 }
 
 export function MiniDiagnosis() {

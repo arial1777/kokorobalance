@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { View, Text, TextInput, Pressable, Switch, ScrollView } from 'react-native';
+import { View, Text, TextInput, Pressable, Switch, ScrollView, Alert } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { api } from '@/lib/api';
@@ -9,7 +9,17 @@ import { supabase } from '@/lib/supabase';
 import { registerForPushNotifications } from '@/lib/push-notifications';
 import { toast } from '@/store/toast';
 import { Icon } from '@/components/ui/icon';
-import type { Category, PresetCategory, Profile } from '@/types';
+import { KIND_LABEL } from '@/components/pillar-sections';
+import { SafetyResourceCard } from '@/components/safety-resource-card';
+import type {
+  Category,
+  HotlineView,
+  PairView,
+  PillarKind,
+  PresetCategory,
+  Profile,
+  RequestVerificationResult,
+} from '@/types';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://kokorobalance.example.com';
 
@@ -30,7 +40,10 @@ export default function SettingsPage() {
   const [customName, setCustomName] = useState('');
   const [customParentName, setCustomParentName] = useState('');
   const [customColor, setCustomColor] = useState(CUSTOM_CATEGORY_COLORS[0]);
+  const [customKind, setCustomKind] = useState<PillarKind>('place');
   const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
+  /** 柱のラベルがセーフティ検知に触れたときの窓口（E-07）。依頼は送られていない */
+  const [requestSafetyPrompt, setRequestSafetyPrompt] = useState<HotlineView[] | null>(null);
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['categories'],
@@ -45,6 +58,11 @@ export default function SettingsPage() {
   const { data: profile } = useQuery<Profile>({
     queryKey: ['profile'],
     queryFn: () => api.get<Profile>('/profile'),
+  });
+
+  const { data: pair } = useQuery<PairView>({
+    queryKey: ['pair'],
+    queryFn: () => api.get<PairView>('/pair'),
   });
 
   function errorMessage(error: unknown) {
@@ -62,17 +80,55 @@ export default function SettingsPage() {
     mutationFn: (presetId: string) => api.post<Category[]>('/categories/bulk', { presetIds: [presetId] }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['categories'] });
-      toast.success('カテゴリを追加しました');
+      toast.success('柱を追加しました');
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  /** 承認を依頼する（09 §3.1）。送信前に必ずラベルが相手に見えることを警告する（PR-A-04） */
+  const requestVerificationMutation = useMutation({
+    mutationFn: (categoryId: string) =>
+      api.post<RequestVerificationResult>('/pair/requests', { categoryId }),
+    onSuccess: (res) => {
+      // ラベルがセーフティ検知に触れたときは依頼が送られていない。
+      // 成功として扱わず、窓口を出す（E-07）
+      if (!res.requested) {
+        setRequestSafetyPrompt(res.hotlines);
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ['pair'] });
+      toast.success('お願いしました');
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  function confirmVerificationRequest(cat: Category) {
+    Alert.alert(
+      `${cat.name}`,
+      `${pair?.partner?.displayName ?? 'お相手'} さんに、この柱を知ってもらいますか？\n\n相手に見えるのは、この名前だけです。\n（「${cat.name}」）`,
+      [
+        { text: 'やめる', style: 'cancel' },
+        { text: '送る', onPress: () => requestVerificationMutation.mutate(cat.id) },
+      ],
+    );
+  }
+
+  /** 型を変える（例: ひとりで追っていた推しを、現場の知り合いができて「居場所」に上げる → 07 §2.3） */
+  const kindMutation = useMutation({
+    mutationFn: ({ id, kind }: { id: string; kind: PillarKind }) => api.patch(`/categories/${id}`, { kind }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['categories'] });
+      qc.invalidateQueries({ queryKey: ['portfolio'] });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
 
   const customCategoryMutation = useMutation({
-    mutationFn: (dto: { name: string; parentName: string; color: string }) =>
+    mutationFn: (dto: { name: string; parentName: string; color: string; kind: PillarKind }) =>
       api.post<Category>('/categories', dto),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['categories'] });
-      toast.success('カテゴリを追加しました');
+      toast.success('柱を追加しました');
       setCustomName('');
       setCustomParentName('');
       setCustomColor(CUSTOM_CATEGORY_COLORS[0]);
@@ -81,12 +137,20 @@ export default function SettingsPage() {
     onError: (error) => toast.error(errorMessage(error)),
   });
 
-  const suggestionMutation = useMutation({
-    mutationFn: (suggestionMuted: boolean) => api.patch('/profile', { suggestionMuted }),
+  const safetyReviewMutation = useMutation({
+    mutationFn: (safetyReviewOptOut: boolean) => api.patch('/profile', { safetyReviewOptOut }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['profile'] });
-      qc.invalidateQueries({ queryKey: ['portfolio'] });
-      toast.success('表示設定を更新しました');
+      toast.success('プライバシー設定を更新しました');
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const analyticsMutation = useMutation({
+    mutationFn: (analyticsOptOut: boolean) => api.patch('/profile', { analyticsOptOut }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['profile'] });
+      toast.success('プライバシー設定を更新しました');
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
@@ -122,8 +186,8 @@ export default function SettingsPage() {
     router.replace('/login');
   }
 
-  const grouped = categories.reduce<Record<string, Category[]>>((acc, c) => {
-    (acc[c.parentName] ??= []).push(c);
+  const groupedByKind = categories.reduce<Partial<Record<PillarKind, Category[]>>>((acc, c) => {
+    (acc[c.kind] ??= []).push(c);
     return acc;
   }, {});
 
@@ -140,13 +204,13 @@ export default function SettingsPage() {
       name: customName.trim(),
       parentName: customParentName.trim(),
       color: customColor,
+      kind: customKind,
     });
   }
 
   const parentNameOptions = Array.from(
     new Set([...categories.map((c) => c.parentName), ...presets.map((p) => p.parentName)]),
   );
-  const isPro = profile?.plan === 'pro';
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="px-4 pb-8 pt-6">
@@ -154,34 +218,96 @@ export default function SettingsPage() {
 
       <View className="gap-6">
         <View>
-          <Text className="mb-3 text-sm font-semibold text-muted-foreground">カテゴリ管理</Text>
-          {Object.entries(grouped).map(([group, cats]) => (
-            <View key={group} className="mb-4">
-              <Text className="mb-2 text-xs text-muted-foreground">{group}</Text>
-              <View className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-                {cats.map((cat, i) => (
-                  <View
-                    key={cat.id}
-                    className={`flex-row items-center px-4 py-3 ${i !== 0 ? 'border-t border-border' : ''}`}
-                  >
-                    <View className="mr-3 h-3 w-3 rounded-full" style={{ backgroundColor: cat.color }} />
-                    <Text className="flex-1 text-sm text-foreground">{cat.name}</Text>
-                    <Switch
-                      value={cat.isActive}
-                      onValueChange={(v) => toggleMutation.mutate({ id: cat.id, isActive: v })}
-                    />
-                  </View>
-                ))}
+          <Text className="mb-1 text-sm font-semibold text-muted-foreground">柱の管理</Text>
+          <Text className="mb-3 text-xs leading-relaxed text-muted-foreground">
+            型はあとから変えられます。ひとりで楽しんでいたものに仲間ができたら「居場所」に移してください。
+          </Text>
+          {(['place', 'relation', 'habit'] as PillarKind[]).map((kind) => {
+            const cats = groupedByKind[kind] ?? [];
+            // 0件のセクションは出さない（07 §3.5 P-03）
+            if (cats.length === 0) return null;
+            return (
+              <View key={kind} className="mb-4">
+                <Text className="mb-2 text-xs text-muted-foreground">{KIND_LABEL[kind]}</Text>
+                <View className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+                  {cats.map((cat, i) => (
+                    <View
+                      key={cat.id}
+                      className={`flex-row items-center px-4 py-3 ${i !== 0 ? 'border-t border-border' : ''}`}
+                    >
+                      <View className="mr-3 h-3 w-3 rounded-full" style={{ backgroundColor: cat.color }} />
+                      <View className="flex-1">
+                        <Text className="text-sm text-foreground" numberOfLines={1}>
+                          {cat.name}
+                        </Text>
+                        {cat.kind !== 'habit' && cat.verifiedAt && (
+                          <Text className="text-[10px] text-emerald-600">確かな柱</Text>
+                        )}
+                        {/* ペアがいるときだけ、育て中の柱に承認を依頼できる（09 §3.1） */}
+                        {pair?.state === 'active' && cat.kind !== 'habit' && !cat.verifiedAt && (
+                          <Pressable
+                            onPress={() => confirmVerificationRequest(cat)}
+                            disabled={pair.outgoingRequests.some((r) => r.categoryId === cat.id)}
+                          >
+                            <Text
+                              className={`text-[10px] ${
+                                pair.outgoingRequests.some((r) => r.categoryId === cat.id)
+                                  ? 'text-muted-foreground'
+                                  : 'text-accent'
+                              }`}
+                            >
+                              {pair.outgoingRequests.some((r) => r.categoryId === cat.id)
+                                ? 'お願い中'
+                                : '承認をお願いする'}
+                            </Text>
+                          </Pressable>
+                        )}
+                      </View>
+                      <View className="mr-2 flex-row gap-1">
+                        {(['place', 'relation', 'habit'] as PillarKind[]).map((k) => (
+                          <Pressable
+                            key={k}
+                            onPress={() => kindMutation.mutate({ id: cat.id, kind: k })}
+                            className={`rounded-md px-1.5 py-1 ${cat.kind === k ? 'bg-primary' : 'bg-secondary'}`}
+                          >
+                            <Text
+                              className={`text-[10px] font-semibold ${cat.kind === k ? 'text-white' : 'text-muted-foreground'}`}
+                            >
+                              {KIND_LABEL[k]}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                      <Switch
+                        value={cat.isActive}
+                        onValueChange={(v) => toggleMutation.mutate({ id: cat.id, isActive: v })}
+                      />
+                    </View>
+                  ))}
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
+
+        {/* 承認依頼がセーフティ検知で止まったとき。依頼は送られていない（E-07） */}
+        {requestSafetyPrompt && (
+          <View>
+            <SafetyResourceCard variant="block" hotlines={requestSafetyPrompt} />
+            <Pressable
+              onPress={() => setRequestSafetyPrompt(null)}
+              className="mt-3 items-center rounded-xl bg-secondary py-2.5"
+            >
+              <Text className="text-sm font-semibold text-foreground">閉じる</Text>
+            </Pressable>
+          </View>
+        )}
 
         {addablePresets.length > 0 && (
           <View>
-            <Text className="mb-3 text-sm font-semibold text-muted-foreground">カテゴリを追加</Text>
+            <Text className="mb-3 text-sm font-semibold text-muted-foreground">よくある柱から追加</Text>
             <Text className="mb-3 text-xs leading-relaxed text-muted-foreground">
-              オンボーディングで選ばなかったカテゴリも、あとから追加できます
+              オンボーディングで選ばなかったものも、あとから追加できます
             </Text>
             {Object.entries(groupedAddable).map(([group, ps]) => (
               <View key={group} className="mb-4">
@@ -205,19 +331,45 @@ export default function SettingsPage() {
           </View>
         )}
 
+        {/* 柱を追加（Free でも使える。自分の言葉で書けることが新しいモデルの根幹 → 07 P-10） */}
         <View>
-          <Text className="mb-3 text-sm font-semibold text-muted-foreground">カスタムカテゴリを追加</Text>
-          {isPro ? (
+          <Text className="mb-3 text-sm font-semibold text-muted-foreground">柱を追加</Text>
+          {(
             <View className="gap-3 rounded-xl border border-border bg-white p-4 shadow-sm">
               <View>
-                <Text className="mb-1.5 text-xs text-muted-foreground">カテゴリ名</Text>
+                <Text className="mb-1.5 text-xs text-muted-foreground">型</Text>
+                <View className="flex-row gap-1.5">
+                  {(['place', 'relation', 'habit'] as PillarKind[]).map((k) => (
+                    <Pressable
+                      key={k}
+                      onPress={() => setCustomKind(k)}
+                      className={`flex-1 items-center rounded-lg border py-1.5 ${
+                        customKind === k ? 'border-primary bg-primary' : 'border-border'
+                      }`}
+                    >
+                      <Text
+                        className={`text-xs font-semibold ${customKind === k ? 'text-white' : 'text-muted-foreground'}`}
+                      >
+                        {KIND_LABEL[k]}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+              <View>
+                <Text className="mb-1.5 text-xs text-muted-foreground">名前</Text>
                 <TextInput
                   value={customName}
                   onChangeText={setCustomName}
-                  maxLength={50}
-                  placeholder="例: 推し活"
+                  maxLength={20}
+                  placeholder={
+                    customKind === 'relation' ? '名前やあだ名でどうぞ' : customKind === 'place' ? '例: 木曜のバンド' : '例: 朝の散歩'
+                  }
                   className="rounded-lg border border-border px-3 py-2 text-sm text-foreground"
                 />
+                {customKind === 'relation' && (
+                  <Text className="mt-1 text-[11px] text-muted-foreground">ここに書いた名前は誰にも見えません。</Text>
+                )}
               </View>
               <View>
                 <Text className="mb-1.5 text-xs text-muted-foreground">グループ名</Text>
@@ -282,21 +434,8 @@ export default function SettingsPage() {
                 }`}
               >
                 <Text className="text-center text-sm font-semibold text-primary-foreground">
-                  {customCategoryMutation.isPending ? '追加中...' : 'カテゴリを追加'}
+                  {customCategoryMutation.isPending ? '追加中...' : '柱を追加'}
                 </Text>
-              </Pressable>
-            </View>
-          ) : (
-            <View className="items-center rounded-xl border border-border bg-white p-5 shadow-sm">
-              <Text className="mb-1 text-sm font-semibold text-foreground">好きな名前でカテゴリを作れます</Text>
-              <Text className="mb-3 text-center text-xs leading-relaxed text-muted-foreground">
-                Proプランなら、プリセットにない自分だけのカテゴリを自由に追加できます
-              </Text>
-              <Pressable
-                onPress={() => router.push('/paywall')}
-                className="rounded-xl bg-accent px-5 py-2.5"
-              >
-                <Text className="text-sm font-semibold text-accent-foreground">Proプランを見る</Text>
               </Pressable>
             </View>
           )}
@@ -342,16 +481,33 @@ export default function SettingsPage() {
         </View>
 
         <View>
-          <Text className="mb-3 text-sm font-semibold text-muted-foreground">表示設定</Text>
+          <Text className="mb-3 text-sm font-semibold text-muted-foreground">プライバシー</Text>
           <View className="rounded-xl border border-border bg-white shadow-sm">
             <View className="flex-row items-center px-4 py-3">
               <View className="flex-1">
-                <Text className="text-sm text-foreground">育成提案を表示しない</Text>
-                <Text className="mt-0.5 text-xs text-muted-foreground">「次に育てる柱」の提案を非表示にします</Text>
+                <Text className="text-sm text-foreground">安全性レビューの対象から外れる</Text>
+                <Text className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  クライシス検知の精度確認のための匿名レビュー対象から除外します。リアルタイムの検知自体は継続します
+                </Text>
               </View>
               <Switch
-                value={profile?.suggestionMuted ?? false}
-                onValueChange={(v) => suggestionMutation.mutate(v)}
+                value={profile?.safetyReviewOptOut ?? false}
+                onValueChange={(v) => safetyReviewMutation.mutate(v)}
+                disabled={!profile}
+              />
+            </View>
+            <View className="border-t border-border" />
+            {/* 分析イベントのオプトアウト（11 ME-05）。セーフティの検知は対象外 */}
+            <View className="flex-row items-center px-4 py-3">
+              <View className="flex-1">
+                <Text className="text-sm text-foreground">利用状況の記録を止める</Text>
+                <Text className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  どの画面をどう使ったかの記録を止めます。書いた内容はもともと記録していません。つらいときの検知と窓口の案内は、安全のため止まりません
+                </Text>
+              </View>
+              <Switch
+                value={profile?.analyticsOptOut ?? false}
+                onValueChange={(v) => analyticsMutation.mutate(v)}
                 disabled={!profile}
               />
             </View>
@@ -366,6 +522,14 @@ export default function SettingsPage() {
               className="flex-row items-center justify-between px-4 py-3"
             >
               <Text className="text-sm text-foreground">プロフィール編集</Text>
+              <Text className="text-muted-foreground">→</Text>
+            </Pressable>
+            <View className="border-t border-border" />
+            <Pressable
+              onPress={() => router.push('/settings/pair')}
+              className="flex-row items-center justify-between px-4 py-3"
+            >
+              <Text className="text-sm text-foreground">ペア</Text>
               <Text className="text-muted-foreground">→</Text>
             </Pressable>
             <View className="border-t border-border" />

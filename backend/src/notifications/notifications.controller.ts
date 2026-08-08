@@ -19,21 +19,12 @@ export class NotificationsController {
 </body></html>`;
   }
 
-  /** Cloud Schedulerから30分刻みで叩かれる日次リマインドの起動口 */
-  @Post('cron/daily-reminders')
+  /** Cloud Schedulerから30分刻みで叩かれる週次点検リマインドの起動口（日曜のみ送信） */
+  @Post('cron/weekly-check-reminders')
   @UseGuards(CronAuthGuard)
   @HttpCode(200)
-  async runDailyReminders(): Promise<{ ok: true }> {
-    await this.service.sendDailyReminders();
-    return { ok: true };
-  }
-
-  /** Cloud Schedulerから毎日19:00 JSTに叩かれる復帰通知の起動口 */
-  @Post('cron/comeback')
-  @UseGuards(CronAuthGuard)
-  @HttpCode(200)
-  async runComeback(): Promise<{ ok: true }> {
-    await this.service.sendComebackEmails();
+  async runWeeklyCheckReminders(): Promise<{ ok: true }> {
+    await this.service.sendWeeklyCheckReminders();
     return { ok: true };
   }
 }

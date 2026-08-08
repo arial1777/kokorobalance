@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import type { PillarKind } from './pillar.types';
 
 @Entity('preset_categories')
 export class PresetCategory {
@@ -16,4 +17,7 @@ export class PresetCategory {
 
   @Column({ name: 'sort_order', default: 0 })
   sortOrder: number;
+
+  @Column({ type: 'varchar', length: 10, default: 'habit' })
+  kind: PillarKind;
 }

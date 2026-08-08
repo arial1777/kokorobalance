@@ -6,6 +6,13 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
+      /**
+       * ここに載せるのは「クローラーが必ずリダイレクトを踏むURL」だけ。
+       * リダイレクトするURLは meta robots を読ませようがないので、クロール自体を止めるしかない
+       * (放置すると Search Console の「ページにリダイレクトがあります」に積み上がる)。
+       * 200 を返すのに索引したくないページ (/login, /signup, /pricing/success) は逆に
+       * ここでブロックせず、noindex メタタグを読ませて外す。
+       */
       disallow: [
         '/dashboard',
         '/record',
@@ -14,8 +21,7 @@ export default function robots(): MetadataRoute.Robots {
         '/coach',
         '/settings',
         '/onboarding',
-        '/login',
-        '/signup',
+        '/auth/',
       ],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,

@@ -22,25 +22,43 @@ export class GeminiService {
     this.location = config.get<string>('GEMINI_LOCATION') ?? 'global';
   }
 
-  async generate(systemPrompt: string, messages: GeminiMessage[]): Promise<string> {
+  async generate(
+    systemPrompt: string,
+    messages: GeminiMessage[],
+    options?: { responseMimeType?: string; timeoutMs?: number },
+  ): Promise<string> {
     const host = this.location === 'global' ? 'aiplatform.googleapis.com' : `${this.location}-aiplatform.googleapis.com`;
     const url = `https://${host}/v1/projects/${this.projectId}/locations/${this.location}/publishers/google/models/${this.model}:generateContent`;
     const accessToken = await this.auth.getAccessToken();
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: messages.map((m) => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }],
-        })),
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = options?.timeoutMs
+      ? setTimeout(() => controller.abort(), options.timeoutMs)
+      : null;
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: messages.map((m) => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content }],
+          })),
+          ...(options?.responseMimeType && {
+            generationConfig: { responseMimeType: options.responseMimeType },
+          }),
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
 
     if (!res.ok) {
       const errorBody = await res.text();

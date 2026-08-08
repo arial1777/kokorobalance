@@ -11,6 +11,10 @@ interface ReminderTarget {
   expo_push_token: string | null;
 }
 
+/** 04-spec-distribution.md §4.2: 1日最大2通・1週最大5通。超える場合は送らない */
+const DAILY_NOTIFICATION_CAP = 2;
+const WEEKLY_NOTIFICATION_CAP = 5;
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -20,14 +24,51 @@ export class NotificationsService {
     private readonly config: ConfigService,
   ) {}
 
+  /** 静音時間（04-spec-distribution.md §4.2）: 22:30〜07:30 JST は送らない */
+  isQuietHours(now: Date = new Date()): boolean {
+    const jst = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Asia/Tokyo',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(now);
+    const [h, m] = jst.split(':').map(Number);
+    const minutes = h * 60 + m;
+    return minutes >= 22 * 60 + 30 || minutes < 7 * 60 + 30;
+  }
+
+  /** 1日2通・1週5通の上限内かどうか（04-spec-distribution.md §4.2） */
+  private async withinBudget(userId: string): Promise<boolean> {
+    const [{ count: dailyCount }] = await this.ds.query<{ count: string }[]>(
+      `SELECT count(*)::int AS count FROM notification_logs
+       WHERE user_id = $1 AND sent_at >= now() - INTERVAL '24 hours'`,
+      [userId],
+    );
+    if (Number(dailyCount) >= DAILY_NOTIFICATION_CAP) return false;
+
+    const [{ count: weeklyCount }] = await this.ds.query<{ count: string }[]>(
+      `SELECT count(*)::int AS count FROM notification_logs
+       WHERE user_id = $1 AND sent_at >= now() - INTERVAL '7 days'`,
+      [userId],
+    );
+    return Number(weeklyCount) < WEEKLY_NOTIFICATION_CAP;
+  }
+
   /**
-   * 毎日のリマインド（v2 §6）。Cloud Schedulerから30分刻みで
-   * POST /notifications/cron/daily-reminders を叩いて起動する
+   * 週次点検のリマインド（06-spec-weekly-check.md N-01）。Cloud Schedulerから30分刻みで
+   * POST /notifications/cron/weekly-check-reminders を叩いて起動する
    * （Cloud Runはスケールゼロするため@Cronでの自走はできない）。
-   * リマインド時刻が直前30分窓に入ったユーザーのうち当日未記録の人へ送る。
+   * 日曜日、リマインド時刻が直前30分窓に入ったユーザーのうち今週未点検の人へ送る。
+   * 「3日間記録がありません」のような催促は行わない（原則1/5、04-spec-distribution.md §4.1）。
+   * 未実施でも翌週まで再送しない（催促は1回のみ）。
    */
-  async sendDailyReminders(): Promise<void> {
+  async sendWeeklyCheckReminders(): Promise<void> {
+    if (this.isQuietHours()) return;
+
     const { today, windowStart, windowEnd } = this.jstNow();
+    if (new Date(`${today}T00:00:00Z`).getUTCDay() !== 0) return; // 日曜のみ
+
+    const weekStart = this.mondayOf(today);
 
     const targets = await this.ds.query<ReminderTarget[]>(
       `SELECT p.id, p.nickname, p.email, p.unsubscribe_token, p.expo_push_token
@@ -37,83 +78,85 @@ export class NotificationsService {
          AND p.reminder_time IS NOT NULL
          AND p.reminder_time >= $1 AND p.reminder_time < $2
          AND NOT EXISTS (
-           SELECT 1 FROM daily_records r
-           WHERE r.user_id = p.id AND r.recorded_date = $3
+           SELECT 1 FROM weekly_checks wc
+           WHERE wc.user_id = p.id AND wc.week_start = $3
          )
          AND NOT EXISTS (
            SELECT 1 FROM notification_logs n
-           WHERE n.user_id = p.id AND n.type = 'daily_reminder'
+           WHERE n.user_id = p.id AND n.type = 'weekly_check_reminder'
              AND n.sent_at >= ($3 || ' 00:00:00+09')::timestamptz
          )`,
-      [windowStart, windowEnd, today],
+      [windowStart, windowEnd, weekStart],
     );
 
     for (const t of targets) {
+      if (!(await this.withinBudget(t.id))) continue;
       if (t.expo_push_token) {
         await this.sendPush(
           t.expo_push_token,
           'ココロバランス',
-          `${t.nickname}さん、今日の心は何で満たされましたか？`,
+          `${t.nickname}さん、今週、支えになったのはなんでしたか？（30秒）`,
           { url: '/record' },
         );
       } else if (t.email) {
         await this.sendEmail(
           t.email,
-          '今日の心、何で満たされましたか？ | ココロバランス',
-          this.reminderHtml(t),
+          '今週、支えになったのはなんでしたか？ | ココロバランス',
+          this.weeklyCheckReminderHtml(t),
         );
       }
-      await this.logSent(t.id, 'daily_reminder');
+      await this.logSent(t.id, 'weekly_check_reminder');
     }
     if (targets.length > 0) {
-      this.logger.log(`日次リマインド送信: ${targets.length}件`);
+      this.logger.log(`週次点検リマインド送信: ${targets.length}件`);
     }
   }
 
   /**
-   * 復帰メール（v2 §6）。Cloud Schedulerから毎日19:00 JSTに
-   * POST /notifications/cron/comeback を叩いて起動する。
-   * 3日以上記録が途切れたユーザーへ週1回まで。罪悪感を煽らない「おかえりなさい」トーン。
+   * 汎用の通知送信（揺れ予報等、日次リマインド/復帰通知以外の機能から利用する）。
+   * 静音時間・頻度上限を尊重し、プッシュ→メールの順にフォールバックする。
+   * 戻り値は実際に送信されたか（静音時間・上限超過・宛先なしの場合はfalse）。
    */
-  async sendComebackEmails(): Promise<void> {
-    const { today } = this.jstNow();
+  async notifyUser(
+    userId: string,
+    type: string,
+    title: string,
+    body: string,
+    data?: Record<string, unknown>,
+  ): Promise<boolean> {
+    if (this.isQuietHours()) return false;
+    if (!(await this.withinBudget(userId))) return false;
 
-    const targets = await this.ds.query<ReminderTarget[]>(
-      `SELECT p.id, p.nickname, p.email, p.unsubscribe_token, p.expo_push_token
-       FROM profiles p
-       WHERE (p.email IS NOT NULL OR p.expo_push_token IS NOT NULL)
-         AND p.email_reminder_enabled = true
-         AND (
-           SELECT MAX(r.recorded_date) FROM daily_records r WHERE r.user_id = p.id
-         ) <= ($1::date - INTERVAL '3 days')
-         AND NOT EXISTS (
-           SELECT 1 FROM notification_logs n
-           WHERE n.user_id = p.id AND n.type = 'comeback'
-             AND n.sent_at >= now() - INTERVAL '7 days'
-         )`,
-      [today],
+    const [target] = await this.ds.query<ReminderTarget[]>(
+      `SELECT id, nickname, email, unsubscribe_token, expo_push_token FROM profiles WHERE id = $1`,
+      [userId],
     );
+    if (!target) return false;
 
-    for (const t of targets) {
-      if (t.expo_push_token) {
-        await this.sendPush(
-          t.expo_push_token,
-          'ココロバランス',
-          `${t.nickname}さん、おかえりなさい。今日のことをひとつだけ記録してみませんか？`,
-          { url: '/record' },
-        );
-      } else if (t.email) {
-        await this.sendEmail(
-          t.email,
-          'おかえりなさい | ココロバランス',
-          this.comebackHtml(t),
-        );
-      }
-      await this.logSent(t.id, 'comeback');
+    if (target.expo_push_token) {
+      await this.sendPush(target.expo_push_token, title, body, data);
+    } else if (target.email) {
+      await this.sendEmail(target.email, title, this.genericHtml(target, title, body, data));
+    } else {
+      return false;
     }
-    if (targets.length > 0) {
-      this.logger.log(`復帰通知送信: ${targets.length}件`);
-    }
+    await this.logSent(userId, type);
+    return true;
+  }
+
+  private genericHtml(t: ReminderTarget, heading: string, bodyText: string, data?: Record<string, unknown>): string {
+    const appUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
+    const path = typeof data?.url === 'string' ? data.url : '/dashboard';
+    return `
+<div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+  <h2 style="color: #1A3352;">${this.escapeHtml(heading)}</h2>
+  <p>${this.escapeHtml(bodyText)}</p>
+  <a href="${appUrl}${path}"
+     style="display: inline-block; background: #E05A3A; color: #fff; padding: 12px 24px; border-radius: 12px; text-decoration: none; font-weight: bold;">
+    ひらく
+  </a>
+  ${this.footerHtml(t)}
+</div>`;
   }
 
   /** ワンクリック配信停止（認証不要・トークンで本人特定） */
@@ -184,31 +227,16 @@ export class NotificationsService {
     }
   }
 
-  private reminderHtml(t: ReminderTarget): string {
+  private weeklyCheckReminderHtml(t: ReminderTarget): string {
     const appUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
     return `
 <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-  <h2 style="color: #1A3352;">${this.escapeHtml(t.nickname)}さん、こんばんは 🌙</h2>
-  <p>今日、あなたの心は何で満たされましたか？</p>
-  <p>タップだけ、10秒で記録できます。</p>
+  <h2 style="color: #1A3352;">${this.escapeHtml(t.nickname)}さん、今週もおつかれさまでした 🌙</h2>
+  <p>この1週間、支えになったのはなんでしたか？</p>
+  <p>タップだけ、30秒で点検できます。</p>
   <a href="${appUrl}/record"
      style="display: inline-block; background: #E05A3A; color: #fff; padding: 12px 24px; border-radius: 12px; text-decoration: none; font-weight: bold;">
-    今日の記録をする
-  </a>
-  ${this.footerHtml(t)}
-</div>`;
-  }
-
-  private comebackHtml(t: ReminderTarget): string {
-    const appUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
-    return `
-<div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-  <h2 style="color: #1A3352;">${this.escapeHtml(t.nickname)}さん、おかえりなさい 🌱</h2>
-  <p>しばらく記録がなくても大丈夫。あなたの心の柱は、いつでもここから育て直せます。</p>
-  <p>今日のことをひとつだけ、10秒で記録してみませんか？</p>
-  <a href="${appUrl}/record"
-     style="display: inline-block; background: #E05A3A; color: #fff; padding: 12px 24px; border-radius: 12px; text-decoration: none; font-weight: bold;">
-    ひさしぶりに記録する
+    今週の点検をする
   </a>
   ${this.footerHtml(t)}
 </div>`;
@@ -252,5 +280,14 @@ export class NotificationsService {
       return `${String(Math.floor(mm / 60)).padStart(2, '0')}:${String(mm % 60).padStart(2, '0')}:00`;
     };
     return { today, windowStart: fmt(startMinutes), windowEnd: fmt(endMinutes) };
+  }
+
+  /** 指定日を含む週の月曜日（週の定義は他サービスと統一） */
+  private mondayOf(date: string): string {
+    const d = new Date(`${date}T00:00:00Z`);
+    const day = d.getUTCDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setUTCDate(d.getUTCDate() + diff);
+    return d.toISOString().split('T')[0];
   }
 }

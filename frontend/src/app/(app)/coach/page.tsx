@@ -6,14 +6,30 @@ import { api } from '@/lib/api';
 import { track } from '@/lib/analytics';
 import { Icon } from '@/components/ui/icon';
 import { AppHeader } from '@/components/layout/app-header';
-import type { AiCoachMessage, ChatResult, CoachQuota, Profile } from '@/types';
+import { SafetyResourceCard } from '@/components/safety-resource-card';
+import type { AiCoachMessage, ChatResult, CoachQuota, HotlineView, Profile } from '@/types';
 
 export default function CoachPage() {
   const qc = useQueryClient();
   const [input, setInput] = useState('');
   const [consentOpen, setConsentOpen] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [hotlinesByMessageId, setHotlinesByMessageId] = useState<Record<string, HotlineView[]>>({});
+  const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // 履歴表示（safetyVerdictはあるがhotlinesを持たない過去メッセージ）用の一般窓口一覧
+  const { data: generalHotlines = [] } = useQuery<HotlineView[]>({
+    queryKey: ['safety-hotlines', 'general'],
+    queryFn: () => api.get<HotlineView[]>('/safety/hotlines'),
+  });
+
+  const reportMutation = useMutation({
+    mutationFn: (messageId: string) => api.post(`/coach/messages/${messageId}/report`),
+    onSuccess: (_data, messageId) => {
+      setReportedIds((prev) => new Set(prev).add(messageId));
+    },
+  });
 
   const { data: profile } = useQuery<Profile>({
     queryKey: ['profile'],
@@ -32,9 +48,12 @@ export default function CoachPage() {
 
   const chatMutation = useMutation({
     mutationFn: (message: string) => api.post<ChatResult>('/coach/chat', { message }),
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['coach-messages'] });
       qc.invalidateQueries({ queryKey: ['coach-quota'] });
+      if (result.hotlines.length > 0) {
+        setHotlinesByMessageId((prev) => ({ ...prev, [result.messageId]: result.hotlines }));
+      }
       track('coach_chat_sent');
       setInput('');
     },
@@ -91,9 +110,11 @@ export default function CoachPage() {
     <div className="flex items-center gap-2">
       {quota &&
         (isFree ? (
-          <span className="text-[11px] font-semibold bg-secondary text-muted-foreground rounded-full px-2.5 py-1">
-            今月あと{quota.remaining}回
-          </span>
+          quota.isShakeToday && (
+            <span className="text-[11px] font-semibold bg-sky-50 text-sky-700 rounded-full px-2.5 py-1">
+              今日は無制限
+            </span>
+          )
         ) : (
           <span className="text-[11px] font-semibold bg-accent/10 text-accent rounded-full px-2.5 py-1">
             Pro
@@ -116,7 +137,7 @@ export default function CoachPage() {
 
   return (
     <>
-      <AppHeader title="AIコーチ" subtitle="心のバランス相談" right={headerRight} />
+      <AppHeader title="壁打ち" subtitle="考えを整理する" right={headerRight} />
 
       <div className="px-4 py-4 space-y-4 pb-48 md:pb-36">
         {isLoading && <p className="text-center text-muted-foreground text-sm">読み込み中...</p>}
@@ -125,30 +146,43 @@ export default function CoachPage() {
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 mb-3">
               <Icon name="smart_toy" filled className="text-3xl text-primary" />
             </div>
-            <p>何でも話しかけてください</p>
-            {isFree && quota && (
-              <p className="text-xs mt-2">無料プランでは月{quota.limit}回まで話せます</p>
-            )}
+            <p>なんでも書いてください。まとまっていなくて大丈夫です。</p>
           </div>
         )}
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-xs md:max-w-sm px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                msg.role === 'user'
-                  ? 'bg-primary text-white rounded-br-sm'
-                  : msg.isCrisis
-                    ? 'bg-sky-50 border border-sky-200 text-foreground rounded-bl-sm shadow-sm'
-                    : 'bg-white border border-border text-foreground rounded-bl-sm shadow-sm'
-              }`}
-            >
-              {msg.content}
+        {messages.map((msg) => {
+          const hotlines = hotlinesByMessageId[msg.id] ?? (msg.safetyVerdict !== 'clear' ? generalHotlines : []);
+          const isBlock = msg.role === 'assistant' && msg.safetyVerdict === 'block';
+          return (
+            <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+              {isBlock ? (
+                <SafetyResourceCard variant="block" hotlines={hotlines} />
+              ) : (
+                <div
+                  className={`max-w-xs md:max-w-sm px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                    msg.role === 'user'
+                      ? 'bg-primary text-white rounded-br-sm'
+                      : 'bg-white border border-border text-foreground rounded-bl-sm shadow-sm'
+                  }`}
+                >
+                  {msg.content}
+                </div>
+              )}
+              {msg.role === 'assistant' && msg.safetyVerdict === 'caution' && (
+                <SafetyResourceCard variant="caution" hotlines={hotlines} />
+              )}
+              {msg.role === 'assistant' && !isBlock && (
+                <button
+                  type="button"
+                  onClick={() => reportMutation.mutate(msg.id)}
+                  disabled={reportedIds.has(msg.id) || !!msg.reportedOffBaseAt || reportMutation.isPending}
+                  className="mt-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground disabled:text-muted-foreground/40 transition"
+                >
+                  {reportedIds.has(msg.id) || msg.reportedOffBaseAt ? '報告しました' : 'この返信は的外れ／つらかった'}
+                </button>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
         {chatMutation.isPending && (
           <div className="flex justify-start">
             <div className="bg-white border border-border rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm text-muted-foreground shadow-sm">
@@ -157,19 +191,21 @@ export default function CoachPage() {
           </div>
         )}
 
-        {/* 無料枠を使い切ったらアップグレード導線 */}
+        {/* 日次枠を使い切ったら、明日また話せることと窓口を伝える（08-spec-companion.md §5.3） */}
         {exhausted && (
           <div className="bg-white rounded-2xl border border-border shadow-sm p-5 text-center">
-            <p className="text-sm font-semibold text-foreground mb-1">今月の無料分を使い切りました</p>
-            <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-              Proプランなら回数無制限で、週間レポートのAIコメントも読めます
-            </p>
+            <p className="text-sm font-semibold text-foreground mb-1">今日はここまでです。</p>
+            <p className="text-xs text-muted-foreground mb-3">また明日、話しましょう。</p>
+            {generalHotlines.length > 0 && (
+              <div className="text-left">
+                <SafetyResourceCard variant="caution" hotlines={generalHotlines} />
+              </div>
+            )}
             <a
               href="/pricing"
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-accent text-white text-sm font-semibold rounded-xl hover:bg-[#c94d30] transition shadow-sm shadow-accent/20"
+              className="mt-3 inline-block text-[11px] text-muted-foreground hover:text-accent hover:underline"
             >
-              Proプランを見る
-              <Icon name="chevron_right" className="text-base" />
+              Pro なら、いつでも話せます →
             </a>
           </div>
         )}
@@ -190,7 +226,7 @@ export default function CoachPage() {
                   handleSend();
                 }
               }}
-              placeholder={exhausted ? '今月の無料分を使い切りました' : '今日の気持ちを話してみて...'}
+              placeholder={exhausted ? '今日はここまでです' : 'いま思っていることを、そのまま'}
               disabled={exhausted}
               className="flex-1 text-sm px-2 focus:outline-none bg-transparent placeholder:text-muted-foreground/50 disabled:opacity-50"
             />
@@ -204,7 +240,7 @@ export default function CoachPage() {
             </button>
           </div>
           <p className="text-[10px] text-muted-foreground text-center mt-1.5 leading-relaxed">
-            AIコーチは医療行為・診断ではありません。つらいときは{' '}
+            壁打ちは医療行為・診断ではありません。つらいときは{' '}
             <a href="/support-resources" target="_blank" className="text-accent hover:underline">
               相談窓口
             </a>
@@ -220,13 +256,16 @@ export default function CoachPage() {
             <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
               <Icon name="shield" filled className="text-2xl text-primary" />
             </div>
-            <h2 className="text-lg font-bold text-foreground mb-2">AIコーチを始める前に</h2>
+            <h2 className="text-lg font-bold text-foreground mb-2">壁打ちを始める前に</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+              これは医療でも診断でもありません。つらいときに頼れる窓口は、いつでもここから見られます。
+            </p>
             <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-              AIコーチとの会話内容と、あなたの心のデータ（ポートフォリオ・柱・揺らぎ）は、応答生成のためにAI（Google Cloud上のGemini）へ送信されます。
+              壁打ちでの会話内容と、あなたの心のデータ（ポートフォリオ・柱・揺らぎ）は、応答生成のためにAI（Google Cloud上のGemini）へ送信されます。
             </p>
             <ul className="text-xs text-muted-foreground space-y-1.5 mb-5 leading-relaxed">
               <li>・データが広告や第三者提供に使われることはありません</li>
-              <li>・AIコーチは医療行為・診断を行いません</li>
+              <li>・壁打ちは医療行為・診断を行いません</li>
               <li>・同意はいつでも設定から取り消せます</li>
             </ul>
             <div className="flex gap-2">

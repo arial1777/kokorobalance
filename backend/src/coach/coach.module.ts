@@ -4,11 +4,12 @@ import { AiCoachMessage } from './ai-coach-message.entity';
 import { AiUsage } from './ai-usage.entity';
 import { CoachService } from './coach.service';
 import { CoachController } from './coach.controller';
-import { CrisisDetectorService } from './crisis-detector.service';
 import { PortfolioModule } from '../portfolio/portfolio.module';
 import { AuthModule } from '../auth/auth.module';
 import { Profile } from '../profile/profile.entity';
 import { GeminiModule } from '../common/gemini.module';
+import { SafetyModule } from '../common/safety/safety.module';
+import { ShakeModule } from '../shake/shake.module';
 
 @Module({
   imports: [
@@ -16,8 +17,10 @@ import { GeminiModule } from '../common/gemini.module';
     PortfolioModule,
     AuthModule,
     GeminiModule,
+    SafetyModule,
+    ShakeModule,
   ],
-  providers: [CoachService, CrisisDetectorService],
+  providers: [CoachService],
   controllers: [CoachController],
 })
 export class CoachModule {}

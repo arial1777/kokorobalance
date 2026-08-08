@@ -12,9 +12,19 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @IsBoolean()
-  suggestionMuted?: boolean;
+  emailReminderEnabled?: boolean;
 
   @IsOptional()
   @IsBoolean()
-  emailReminderEnabled?: boolean;
+  safetyReviewOptOut?: boolean;
+
+  /** 柱の再定義（07）の移行通知を閉じたか */
+  @IsOptional()
+  @IsBoolean()
+  pillarNoticeDismissed?: boolean;
+
+  /** 分析イベントの記録を止める（11 ME-05） */
+  @IsOptional()
+  @IsBoolean()
+  analyticsOptOut?: boolean;
 }

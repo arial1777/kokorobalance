@@ -5,11 +5,9 @@ import { ConfigService } from '@nestjs/config';
 import { DataSource, Repository } from 'typeorm';
 import { WeeklyReport } from './weekly-report.entity';
 import { PortfolioService } from '../portfolio/portfolio.service';
+import type { PortfolioPillars } from '../portfolio/portfolio.service';
 import { Profile } from '../profile/profile.entity';
 import { GeminiService } from '../common/gemini.service';
-
-/** レポート生成に必要な週内の最低記録日数 */
-const MIN_RECORD_DAYS = 2;
 
 export interface FluctuationSummary {
   count: number;
@@ -24,15 +22,14 @@ export interface FluctuationSummary {
 
 export interface GenerateReportResult {
   generated: boolean;
-  reason?: 'insufficient_records';
-  recordDays?: number;
+  reason?: 'no_check';
   report?: WeeklyReport;
 }
 
 interface WeekAggregation {
   breakdown: Record<string, number>;
   fulfillmentTotal: number;
-  recordDays: number;
+  entryCount: number;
 }
 
 @Injectable()
@@ -67,25 +64,31 @@ export class ReportsService {
     return this.reportRepo.findOne({ where: { userId, weekStartDate: weekStartDate as any } });
   }
 
+  /**
+   * 「今週のまとめ」を生成する。週次点検が完了していれば0件選択でも生成する
+   * （06-spec-weekly-check.md §4.2、記録日数によるゲートは撤去）。
+   * WeeklyCheckService.upsert() から点検完了のたびに自動で呼ばれるのが主経路。
+   */
   async generateReport(userId: string, weekStartDate?: string): Promise<GenerateReportResult> {
     const monday = weekStartDate ?? this.currentMondayJST();
     const weekEnd = this.addDays(monday, 6);
 
-    const agg = await this.aggregateWeek(userId, monday, weekEnd);
-
-    // 記録2日未満の週はレポートを生成しない（v2 §5.1.6）
-    if (agg.recordDays < MIN_RECORD_DAYS) {
-      return { generated: false, reason: 'insufficient_records', recordDays: agg.recordDays };
+    const checkRow = await this.ds.query<{ id: string }[]>(
+      `SELECT id FROM weekly_checks WHERE user_id = $1 AND week_start = $2`,
+      [userId, monday],
+    );
+    if (checkRow.length === 0) {
+      return { generated: false, reason: 'no_check' };
     }
 
+    const agg = await this.aggregateWeek(userId, monday);
     const pillars = await this.portfolioService.getPillars(userId);
     const fluctuationSummary = await this.summarizeFluctuations(userId, monday, weekEnd);
 
     const profile = await this.profileRepo.findOne({ where: { id: userId } });
     let aiComment: string | null = null;
     if (profile?.plan === 'pro') {
-      const previous = await this.getReport(userId, this.addDays(monday, -7));
-      aiComment = await this.generateAiComment(agg, previous, pillars.count, fluctuationSummary);
+      aiComment = await this.generateAiComment(agg, pillars, fluctuationSummary);
     }
 
     const data: Partial<WeeklyReport> = {
@@ -95,7 +98,8 @@ export class ReportsService {
       totalScore: agg.fulfillmentTotal,
       fulfillmentTotal: agg.fulfillmentTotal,
       diversityScore: this.calcDiversityScore(agg.breakdown),
-      pillarCount: pillars.count,
+      // 内部指標として保持。UIには出さない（07 §3.5 P-01）。習慣は数えない
+      pillarCount: pillars.verified.length + pillars.growing.length,
       fluctuationSummary: fluctuationSummary as unknown as Record<string, unknown>,
       aiComment,
     };
@@ -114,41 +118,35 @@ export class ReportsService {
     return { generated: true, report };
   }
 
-  /** 毎週月曜 0:00 JST に「終わったばかりの前週」のレポートを全ユーザー分生成 */
+  /**
+   * 毎週月曜 0:00 JST に「終わったばかりの前週」のレポートを未生成分だけ補完する保険。
+   * 主経路は WeeklyCheckService.upsert() からの同期生成（Cloud Runはスケールゼロするため
+   * @Cronでの自走は保証されない）。
+   */
   @Cron('0 0 * * 1', { timeZone: 'Asia/Tokyo' })
   async generateWeeklyReportsForAll(): Promise<void> {
     const profiles = await this.profileRepo.find();
-    // 月曜0時時点の currentMonday はその日自身なので、対象は前週の月曜
     const targetMonday = this.addDays(this.currentMondayJST(), -7);
     const results = await Promise.allSettled(
       profiles.map((p) => this.generateReport(p.id, targetMonday)),
     );
     const failed = results.filter((r) => r.status === 'rejected').length;
     if (failed > 0) {
-      this.logger.warn(`週間レポート生成: ${failed}/${profiles.length} 件失敗`);
+      this.logger.warn(`今週のまとめ生成: ${failed}/${profiles.length} 件失敗`);
     }
   }
 
-  /** 対象週のカテゴリ別シェア・充足度・記録日数を集計 */
-  private async aggregateWeek(userId: string, from: string, to: string): Promise<WeekAggregation> {
+  /** 対象週のカテゴリ別シェア・充足度を週次点検エントリから集計 */
+  private async aggregateWeek(userId: string, weekStart: string): Promise<WeekAggregation> {
     const rows = await this.ds.query<{ name: string; total: string }[]>(
-      `SELECT c.name, SUM(ri.score) AS total
-       FROM daily_record_items ri
-       JOIN daily_records r ON r.id = ri.record_id
-       JOIN categories c ON c.id = ri.category_id
-       WHERE r.user_id = $1
-         AND r.recorded_date BETWEEN $2 AND $3
-         AND ri.score > 0
+      `SELECT c.name, SUM(wce.level) AS total
+       FROM weekly_check_entries wce
+       JOIN weekly_checks wc ON wc.id = wce.weekly_check_id
+       JOIN categories c ON c.id = wce.category_id
+       WHERE wc.user_id = $1 AND wc.week_start = $2
        GROUP BY c.name
        ORDER BY total DESC`,
-      [userId, from, to],
-    );
-
-    const daysRow = await this.ds.query<{ count: string }[]>(
-      `SELECT COUNT(DISTINCT recorded_date) AS count
-       FROM daily_records
-       WHERE user_id = $1 AND recorded_date BETWEEN $2 AND $3`,
-      [userId, from, to],
+      [userId, weekStart],
     );
 
     const grandTotal = rows.reduce((s, r) => s + Number(r.total), 0);
@@ -161,7 +159,7 @@ export class ReportsService {
     return {
       breakdown,
       fulfillmentTotal: grandTotal,
-      recordDays: Number(daysRow[0]?.count ?? 0),
+      entryCount: rows.length,
     };
   }
 
@@ -200,39 +198,46 @@ export class ReportsService {
   /**
    * Pro向けAIコメント生成。
    * 与えられた集計データに含まれる事実のみに言及させる（推測・捏造の禁止）。
+   * 前週との比較表現は原則1（判定しない）に反するため、前週データは渡さない。
    */
   private async generateAiComment(
     agg: WeekAggregation,
-    previous: WeeklyReport | null,
-    pillarCount: number,
+    pillars: PortfolioPillars,
     fluctuations: FluctuationSummary,
   ): Promise<string> {
     const top = Object.entries(agg.breakdown).sort(([, a], [, b]) => b - a)[0];
 
     if (this.isStub) {
-      const base = `今週は${agg.recordDays}日記録できました。おつかれさまです。`;
-      const topLine = top ? `「${top[0]}」が${top[1]}%と、あなたを一番支えてくれた週でした。` : '';
-      return `${base}${topLine}来週も、まずは1日の記録から始めてみましょう。`;
+      const topLine = top ? `今週は「${top[0]}」が大きな支えになった週でした。` : '今週は静かな一週間でしたね。';
+      return `${topLine}来週も、気の向くままに過ごしてみましょう。`;
     }
 
-    const systemPrompt = `あなたは心のバランスコーチです。ユーザーの週間データをもとに、週の振り返りコメントを日本語で書いてください。
+    const systemPrompt = `あなたは、ユーザーの週次点検をそっと言葉にする書き手です。日本語で書いてください。
 
 ## ルール
 - 200文字以内
 - 構成: ①ねぎらい ②データから読み取れる気づき1つ ③来週できる小さな行動1つ
 - 与えられた集計データに含まれる事実のみに言及する。データにない事柄（睡眠・食事・体調など）を推測して書かない
+- 数値・パーセンテージ・本数・件数を一切引用しない
+- 前週との比較や増減の指摘をしない
 - 医療・診断的な表現はしない
 - 「依存」という言葉を使わず、「柱を育てる」という表現を使う`;
 
+    // 数値は渡さない。名前と状態だけを渡す（07 §3.5 / 08 §4.4）
+    const pillarLine = [
+      pillars.verified.length > 0 ? `確かな柱: ${pillars.verified.map((p) => p.categoryName).join('、')}` : null,
+      pillars.growing.length > 0 ? `育て中: ${pillars.growing.map((p) => p.categoryName).join('、')}` : null,
+    ]
+      .filter(Boolean)
+      .join(' / ');
+
     const userContent = `## 今週の集計
-- 記録日数: ${agg.recordDays}日
-- 充足度合計: ${agg.fulfillmentTotal}pt
-- カテゴリ別シェア: ${JSON.stringify(agg.breakdown)}
-- 心の柱: ${pillarCount}本
-- 心が揺れた出来事: ${fluctuations.count}件${fluctuations.events.length > 0 ? ` (${fluctuations.events.map((e) => `${e.categoryName ?? '不明'}・${e.magnitude}`).join(', ')})` : ''}
-${previous ? `## 前週の集計
-- 充足度合計: ${previous.fulfillmentTotal}pt
-- カテゴリ別シェア: ${JSON.stringify(previous.categoryBreakdown)}` : '## 前週のデータはありません'}`;
+- 支えになったもの: ${Object.keys(agg.breakdown).join('、') || 'なし'}
+${pillarLine ? `- 柱: ${pillarLine}\n` : ''}- 心が揺れた出来事: ${
+      fluctuations.events.length > 0
+        ? fluctuations.events.map((e) => `${e.categoryName ?? '不明'}・${e.magnitude}`).join('、')
+        : 'なし'
+    }`;
 
     return this.gemini.generate(systemPrompt, [{ role: 'user', content: userContent }]);
   }

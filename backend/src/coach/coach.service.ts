@@ -1,38 +1,68 @@
-import { ForbiddenException, HttpException, Injectable } from '@nestjs/common';
+import { ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, MoreThanOrEqual, Repository } from 'typeorm';
+import { Between, DataSource, MoreThanOrEqual, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AiCoachMessage } from './ai-coach-message.entity';
 import { AiUsage } from './ai-usage.entity';
-import { CrisisDetectorService } from './crisis-detector.service';
 import { PortfolioService } from '../portfolio/portfolio.service';
 import { Profile } from '../profile/profile.entity';
 import { GeminiService } from '../common/gemini.service';
+import { SafetyService } from '../common/safety/safety.service';
+import { HotlineView, SafetyVerdict } from '../common/safety/safety.types';
+import { ShakeService } from '../shake/shake.service';
+import { ResponseType, selectResponseType, violatesPolicy } from './response-policy';
 
-/** 無料プランの月間チャット回数上限（v2 §5.1.7） */
-export const FREE_MONTHLY_LIMIT = 3;
-/** Proプランの月間チャット回数上限（コスト超過防止のためのソフトキャップ） */
-export const PRO_MONTHLY_LIMIT = 100;
+/** Freeプランの日次往復上限（08-spec-companion.md §5.1、4時始まりでリセット） */
+export const FREE_DAILY_LIMIT = 1;
+/** Proプランの日次往復上限（コスト超過防止のためのソフトキャップ） */
+export const PRO_DAILY_LIMIT = 100;
+
+/** 生成に失敗した場合の固定応答（AI-23: 往復としてカウントしない） */
+const GENERATION_FAILURE_REPLY = 'うまく言葉が出てきませんでした。もう一度送ってもらえますか。';
+
+/** 後処理チェックに2回連続で失敗した場合の型Aフォールバック */
+const POLICY_FALLBACK_REPLY = 'そうなんですね。話してくれてありがとうございます。';
+
+const TYPE_INSTRUCTIONS: Record<ResponseType, string> = {
+  A: '型A（受け止めるだけ）: 気持ちをそのまま受け止める言葉だけを返す。助言・行動提案・気づきの指摘はしない。',
+  B: '型B（短い問い返し）: 気持ちを一度受け止めたうえで、もう少し聞かせてほしいという短い問いを1つだけ添える。',
+  C: '型C（選択肢）: 気持ちを受け止めたうえで、今できそうな小さな行動の選択肢を2〜3個、決めつけずに並べる。どれを選ぶか・選ばないかはユーザーに委ねる。',
+  D: '型D（揺れそうな日への言及）: 気持ちを受け止めたうえで、下記「近づいている揺れそうな日」に一度だけ、押しつけがましくなく触れてよい。この話題以外では揺れそうな日に触れない。',
+};
 
 export interface CoachQuota {
   plan: 'free' | 'pro';
   limit: number | null;
   used: number;
   remaining: number | null;
+  /** 揺れ当日はFreeでも無制限（05-spec-shake-forecast.md §6.4 S-27） */
+  isShakeToday: boolean;
 }
 
 export interface ChatResult {
   reply: string;
   messageId: string;
+  /** @deprecated verdict === 'block' と同義。後方互換のため残す */
   crisis: boolean;
+  verdict: SafetyVerdict;
+  hotlines: HotlineView[];
 }
 
 const STUB_REPLIES = [
-  'よく話してくれましたね。ポートフォリオを見ると、最近は特定の柱に支えが集まっているようです。今週は普段やらないことを一つ、5分だけ試してみませんか？',
-  'その気持ち、よくわかります。心の柱を保つには、小さな楽しみを複数持つことが大切です。今日は5分だけ好きな音楽を聴いてみてください。',
-  '教えてくれてありがとうございます。記録を見ると、育てかけの柱がいくつかあります。友達に連絡を一本入れてみるのはいかがでしょうか？',
-  'なるほど、そう感じているのですね。いまのバランスは悪くないですが、健康の柱がすこし細めです。明日の朝、10分だけ散歩してみましょう。',
+  'よく話してくれましたね。今日はそのことを聞かせてくれてありがとうございます。',
+  'その気持ち、よくわかります。話してくれるだけで十分ですよ。',
+  '教えてくれてありがとうございます。そう感じているのですね。',
+  'なるほど、そう感じているのですね。もう少し聞かせてもらえますか？',
 ];
+
+interface CoachContext {
+  historyLength: number;
+  messages: { role: 'user' | 'assistant'; content: string }[];
+  previousAssistantText: string | null;
+  threadSummary: string | null;
+  categoryLines: string[];
+  nearbyShake: { title: string; daysUntil: number } | null;
+}
 
 @Injectable()
 export class CoachService {
@@ -49,8 +79,9 @@ export class CoachService {
     @InjectDataSource()
     private readonly ds: DataSource,
     private readonly portfolioService: PortfolioService,
-    private readonly crisisDetector: CrisisDetectorService,
+    private readonly safety: SafetyService,
     private readonly gemini: GeminiService,
+    private readonly shake: ShakeService,
     private readonly config: ConfigService,
   ) {
     // AI_STUB を明示的に 'false' にした場合のみ実API呼び出しに切り替える(デフォルトは安全側でスタブ)
@@ -91,13 +122,15 @@ export class CoachService {
   async getQuota(userId: string): Promise<CoachQuota> {
     const profile = await this.profileRepo.findOne({ where: { id: userId } });
     const plan = profile?.plan ?? 'free';
-    const used = await this.getMonthlyUsage(userId);
-    const limit = plan === 'pro' ? PRO_MONTHLY_LIMIT : FREE_MONTHLY_LIMIT;
+    const used = await this.getDailyUsage(userId);
+    const limit = plan === 'pro' ? PRO_DAILY_LIMIT : FREE_DAILY_LIMIT;
+    const isShakeToday = plan !== 'pro' && (await this.shake.hasActiveEventToday(userId));
     return {
       plan,
       limit,
       used,
       remaining: Math.max(0, limit - used),
+      isShakeToday,
     };
   }
 
@@ -109,41 +142,86 @@ export class CoachService {
       throw new HttpException('AI_CONSENT_REQUIRED', 428);
     }
 
-    // クライシス検知（v2 §7.2）: AIに送らず固定応答で相談窓口を案内。無料枠も消費しない
-    if (this.crisisDetector.detect(userMessage)) {
-      const reply = this.crisisDetector.buildCrisisReply();
-      const messageId = await this.saveExchange(userId, userMessage, reply, true);
-      return { reply, messageId, crisis: true };
+    // セーフティ判定（03-spec-safety.md）。AIに送る前に必ず通す。
+    // 日次枠を使い切っていてもここは必ず実行する（AI-22: 上限到達時でもセーフティ判定は動く）
+    const evaluation = await this.safety.evaluate(userMessage, 'companion', userId);
+
+    if (evaluation.verdict === 'block') {
+      // block: AIには送らず固定応答＋窓口のみを返す。日次枠も消費しない
+      const hotlines = await this.safety.getHotlines(evaluation.category);
+      const reply = this.buildBlockReply();
+      const messageId = await this.saveExchange(userId, userMessage, reply, 'block');
+      return { reply, messageId, crisis: true, verdict: 'block', hotlines };
     }
 
-    // 月間枠チェック（Proはソフトキャップとして100回/月）
-    const limit = profile.plan === 'pro' ? PRO_MONTHLY_LIMIT : FREE_MONTHLY_LIMIT;
-    const used = await this.getMonthlyUsage(userId);
-    if (used >= limit) {
-      throw new ForbiddenException('QUOTA_EXCEEDED');
+    // 日次枠チェック（08 §5.1）。ただし揺れの当日はFreeユーザーでも無制限（05 §6.4 S-27）
+    const isShakeToday = profile.plan !== 'pro' && (await this.shake.hasActiveEventToday(userId));
+    if (!isShakeToday) {
+      const limit = profile.plan === 'pro' ? PRO_DAILY_LIMIT : FREE_DAILY_LIMIT;
+      const used = await this.getDailyUsage(userId);
+      if (used >= limit) {
+        throw new ForbiddenException('QUOTA_EXCEEDED');
+      }
     }
 
-    const reply = this.isStub
-      ? this.stubReply()
-      : await this.callAi(userId, userMessage);
+    let reply: string;
+    let generationFailed = false;
+    if (this.isStub) {
+      reply = this.stubReply();
+    } else {
+      try {
+        reply = await this.generateReply(userId, userMessage, evaluation.verdict === 'caution');
+      } catch {
+        // タイムアウト・API障害など（08 §7）。往復としてカウントしない
+        reply = GENERATION_FAILURE_REPLY;
+        generationFailed = true;
+      }
+    }
 
-    const messageId = await this.saveExchange(userId, userMessage, reply, false);
+    let hotlines: HotlineView[] = [];
+    if (evaluation.verdict === 'caution') {
+      hotlines = await this.safety.getHotlines(evaluation.category);
+    }
+
+    if (generationFailed) {
+      return { reply, messageId: '', crisis: false, verdict: evaluation.verdict, hotlines };
+    }
+
+    const messageId = await this.saveExchange(userId, userMessage, reply, evaluation.verdict);
     await this.incrementUsage(userId);
 
-    return { reply, messageId, crisis: false };
+    return { reply, messageId, crisis: false, verdict: evaluation.verdict, hotlines };
+  }
+
+  /** 「この返信は的外れ／つらかった」報告（03 §6.1 C）。全AI応答から呼べる */
+  async reportOffBase(userId: string, messageId: string): Promise<void> {
+    const message = await this.messageRepo.findOne({ where: { id: messageId, userId, role: 'assistant' } });
+    if (!message) {
+      throw new NotFoundException('メッセージが見つかりません');
+    }
+    await this.messageRepo.update(messageId, { reportedOffBaseAt: new Date() });
+  }
+
+  private buildBlockReply(): string {
+    return [
+      '話してくれてありがとうございます。いま、とてもつらい状況なのですね。あなたの気持ちはとても大切です。',
+      '',
+      '私はAIで、専門的な支援はできません。つらい気持ちが続くときは、ひとりで抱えずに、専門の相談窓口に話してみてください。',
+    ].join('\n');
   }
 
   private async saveExchange(
     userId: string,
     userMessage: string,
     reply: string,
-    isCrisis: boolean,
+    verdict: SafetyVerdict,
   ): Promise<string> {
+    const isCrisis = verdict === 'block';
     await this.messageRepo.save(
-      this.messageRepo.create({ userId, role: 'user', content: userMessage, isCrisis }),
+      this.messageRepo.create({ userId, role: 'user', content: userMessage, isCrisis, safetyVerdict: verdict }),
     );
     const assistant = await this.messageRepo.save(
-      this.messageRepo.create({ userId, role: 'assistant', content: reply, isCrisis }),
+      this.messageRepo.create({ userId, role: 'assistant', content: reply, isCrisis, safetyVerdict: verdict }),
     );
     return assistant.id;
   }
@@ -154,14 +232,15 @@ export class CoachService {
       .slice(0, 7);
   }
 
-  private async getMonthlyUsage(userId: string): Promise<number> {
-    const row = await this.usageRepo.findOne({
-      where: { userId, month: this.currentMonthJST() },
+  /** 日次枠の判定に使う「今日」の往復数（4時始まり境界、ユーザー発話の件数） */
+  private async getDailyUsage(userId: string): Promise<number> {
+    const boundary = this.activeDayBoundary();
+    return this.messageRepo.count({
+      where: { userId, role: 'user', createdAt: MoreThanOrEqual(boundary) },
     });
-    return row?.chatCount ?? 0;
   }
 
-  /** コスト把握のためProも含めて全ユーザーの利用回数を記録する（v2 §9.2） */
+  /** コスト把握のためProも含めて全ユーザーの月間利用回数を記録する（枠判定には使わない） */
   private async incrementUsage(userId: string): Promise<void> {
     await this.ds.query(
       `INSERT INTO ai_usage (user_id, month, chat_count)
@@ -178,57 +257,126 @@ export class CoachService {
     return reply;
   }
 
-  private async callAi(userId: string, userMessage: string): Promise<string> {
-    const portfolio = await this.portfolioService.getPortfolio(userId, 30);
-    const recentFluctuations = await this.ds.query<
-      { occurred_date: string; magnitude: string; name: string | null }[]
-    >(
-      `SELECT f.occurred_date::text AS occurred_date, f.magnitude, c.name
-       FROM fluctuation_events f
-       LEFT JOIN categories c ON c.id = f.category_id
-       WHERE f.user_id = $1 AND f.occurred_date >= CURRENT_DATE - INTERVAL '14 days'
-       ORDER BY f.occurred_date DESC
-       LIMIT 5`,
-      [userId],
-    );
+  private daysBetween(from: string, to: string): number {
+    const a = new Date(`${from}T00:00:00Z`);
+    const b = new Date(`${to}T00:00:00Z`);
+    return Math.round((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000));
+  }
+
+  private async buildContext(userId: string): Promise<CoachContext> {
     const since = await this.threadSince(userId);
     const history = await this.messageRepo.find({
       where: { userId, createdAt: MoreThanOrEqual(since) },
       order: { createdAt: 'DESC' },
       take: 10,
     });
-
-    const systemPrompt = `あなたは心のバランスコーチです。ユーザーの「心のポートフォリオ」データをもとに、日本語で応答してください。
-
-## 応答の構成
-- ユーザーが新しい話題・悩みを話し始めたときは、次の3つをこの順で含める: 1. 共感（気持ちを受け止める） 2. 気づき（下のデータから読み取れることを1つ伝える） 3. 提案（今週できる小さな具体的行動を1つだけ）
-- 直前の自分の提案についてユーザーが質問・修正依頼・具体化の依頼をしている場合（会話履歴を見て判断する）は、上記の型に縛られず、その質問・依頼に直接答える。共感の言い直しや同じデータの再引用を毎回繰り返さない
-
-## 現在のポートフォリオ（過去30日）
-${portfolio.breakdown.map((b) => `- ${b.categoryName}: ${b.percentage}%`).join('\n')}
-
-## 心の柱: ${portfolio.pillars.count}本
-${portfolio.pillars.items.map((p) => `- ${p.categoryName}（${p.stage === 'pillar' ? '柱' : p.stage === 'young' ? '若木' : '芽'}・週${p.weeklyFrequency}回）`).join('\n')}
-
-## 充足度（過去30日合計）: ${portfolio.fulfillment.total}pt
-
-## 最近の心の揺らぎ（直近14日）
-${recentFluctuations.length > 0 ? recentFluctuations.map((f) => `- ${f.occurred_date}: ${f.name ?? '（カテゴリなし）'}・${f.magnitude}`).join('\n') : 'なし'}
-
-${portfolio.suggestion.exists ? `## 育成提案: ${portfolio.suggestion.message}` : ''}
-
-## ルール
-- 200文字以内で簡潔に返答する
-- 上のデータに含まれる事実のみに言及し、データにないこと（睡眠・食事・体調など）を推測して書かない
-- 診断・医療的アドバイス・薬剤への言及をしない
-- 「依存」という言葉を使わず、「柱を育てる」という表現を使う
-- ユーザーが希死念慮・自傷をほのめかした場合は、助言をやめて共感を示し、専門の相談窓口（よりそいホットライン 0120-279-338 など）を案内する`;
-
+    const previousAssistantText = history.find((m) => m.role === 'assistant')?.content ?? null;
     const messages = history
+      .slice()
       .reverse()
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-    messages.push({ role: 'user', content: userMessage });
 
-    return this.gemini.generate(systemPrompt, messages);
+    // 柱は名前と状態（確かな柱/育て中/習慣）のみ渡す。数値（%・pt・本数）は渡さない（08 §4.4）
+    const stages = await this.portfolioService.getCategoryStages(userId);
+    const statusLabel = { verified: '確かな柱', growing: '育て中', habit: '習慣' } as const;
+    const categoryLines = [...stages.values()].map((s) => `- ${s.name}（${statusLabel[s.status]}）`);
+
+    // 揺れそうな日: タイトル・残り日数のみ（08 §4.4）
+    const events = await this.shake.getEvents(userId);
+    const todayJST = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date());
+    let nearbyShake: CoachContext['nearbyShake'] = null;
+    for (const e of events) {
+      if (e.status === 'archived') continue;
+      const daysUntil = this.daysBetween(todayJST, e.eventDate);
+      if (daysUntil < 0 || daysUntil > 7) continue;
+      if (!nearbyShake || daysUntil < nearbyShake.daysUntil) {
+        nearbyShake = { title: e.title, daysUntil };
+      }
+    }
+
+    const threadSummary = history.length === 0 ? await this.buildThreadSummary(userId, since) : null;
+
+    return {
+      historyLength: history.length,
+      messages,
+      previousAssistantText,
+      threadSummary,
+      categoryLines,
+      nearbyShake,
+    };
+  }
+
+  /**
+   * 新しいスレッドの最初の発話時に、直近4週間・今回の境界より前の会話を500文字以内に要約する
+   * （08 §4.4/4.5: リセット後も過去の要約は引き継がれる）。数値の統計は含めない。
+   */
+  private async buildThreadSummary(userId: string, before: Date): Promise<string | null> {
+    if (this.isStub) return null;
+    const fourWeeksAgo = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
+    if (fourWeeksAgo >= before) return null;
+
+    const prior = await this.messageRepo.find({
+      where: { userId, role: 'user', createdAt: Between(fourWeeksAgo, before) },
+      order: { createdAt: 'DESC' },
+      take: 20,
+    });
+    if (prior.length === 0) return null;
+
+    const transcript = prior
+      .slice()
+      .reverse()
+      .map((m) => `ユーザー: ${m.content}`)
+      .join('\n');
+    const summaryPrompt =
+      '以下はユーザーが「壁打ち」機能で過去4週間に話した内容です。統計や数値は含めず、話題の流れだけを500文字以内の日本語で要約してください。判定や評価はしないでください。';
+
+    try {
+      return await this.gemini.generate(summaryPrompt, [{ role: 'user', content: transcript }], {
+        timeoutMs: 8000,
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  private buildSystemPrompt(ctx: CoachContext, responseType: ResponseType, caution: boolean): string {
+    return `あなたは、ユーザーが考えを整理するための「壁打ち」相手です。日本語で応答してください。
+
+## 応答の型
+${TYPE_INSTRUCTIONS[responseType]}
+${caution ? '\n今回のユーザー発話はつらさが強いと判定されています。型に関わらず、助言や提案はせず、共感と受け止めを優先してください。\n' : ''}
+${ctx.threadSummary ? `## これまでの会話の要約\n${ctx.threadSummary}\n` : ''}
+## いまの柱（カテゴリとステージ）
+${ctx.categoryLines.length > 0 ? ctx.categoryLines.join('\n') : 'まだ記録がありません'}
+
+${ctx.nearbyShake ? `## 近づいている揺れそうな日\n- ${ctx.nearbyShake.title}（あと${ctx.nearbyShake.daysUntil}日）\n` : ''}
+## 守ること
+- 200文字以内で簡潔に返答する
+- パーセンテージ・回数・ポイント・本数などの数値を一切引用しない
+- 「〜すべき」「〜してください」のような命令形は使わず、提案は「〜してみるのはどうでしょう」のような柔らかい言い方にとどめる
+- ユーザーの選択や気持ちを否定しない。良い/悪いの評価をしない
+- 「先週と比べて」のような週次の比較はしない
+- 原因を勝手に推測して指摘しない（例: 「〜が原因かもしれません」と決めつけない）
+- 病名・症状名・診断に類する言葉を使わない
+- 自分（AI）の感情を主張しない（「私も嬉しいです」等は使わない）
+- 直前の自分の発言と同じ言い回しを繰り返さない
+- 「依存」という言葉を使わず、「柱を育てる」という表現を使う
+- ユーザーが希死念慮・自傷をほのめかした場合は、助言をやめて共感を示し、専門の相談窓口（よりそいホットライン 0120-279-338 など）を案内する`;
+  }
+
+  private async generateReply(userId: string, userMessage: string, caution: boolean): Promise<string> {
+    const ctx = await this.buildContext(userId);
+    const responseType = caution ? 'A' : selectResponseType(userMessage, ctx.historyLength, !!ctx.nearbyShake);
+    const systemPrompt = this.buildSystemPrompt(ctx, responseType, caution);
+    const messages = [...ctx.messages, { role: 'user' as const, content: userMessage }];
+
+    let reply = await this.gemini.generate(systemPrompt, messages, { timeoutMs: 15000 });
+    if (violatesPolicy(reply, ctx.previousAssistantText)) {
+      reply = await this.gemini.generate(systemPrompt, messages, { timeoutMs: 15000 });
+      if (violatesPolicy(reply, ctx.previousAssistantText)) {
+        reply = POLICY_FALLBACK_REPLY;
+      }
+    }
+    return reply;
   }
 }

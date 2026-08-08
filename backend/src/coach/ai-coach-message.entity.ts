@@ -22,6 +22,12 @@ export class AiCoachMessage {
   @Column({ name: 'is_crisis', default: false })
   isCrisis: boolean;
 
+  @Column({ name: 'safety_verdict', type: 'varchar', length: 10, nullable: true })
+  safetyVerdict: 'clear' | 'caution' | 'block' | null;
+
+  @Column({ name: 'reported_off_base_at', type: 'timestamptz', nullable: true })
+  reportedOffBaseAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

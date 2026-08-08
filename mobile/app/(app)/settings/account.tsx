@@ -140,6 +140,12 @@ export default function AccountPage() {
                 <Text className="text-sm text-foreground">{restoring ? '復元中…' : '購入を復元'}</Text>
               </Pressable>
             </View>
+            {/* 解約手順を隠さない（10-pricing-b2b.md M-A-10） */}
+            <Text className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              解約は「サブスクリプションを管理」（iPhoneの設定 ＞ Apple ID ＞ サブスクリプション）から行えます。
+              Appleの仕組み上、アプリ側からは解約できません。解約後も、契約期間の終わりまでは Pro のままです。
+              Webから登録した場合は、Webの設定 ＞ アカウントから解約してください。
+            </Text>
           </View>
         )}
 
@@ -159,7 +165,7 @@ export default function AccountPage() {
             </Pressable>
           </View>
           <Text className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            記録・診断・レポート・AIコーチの会話履歴をダウンロードできます
+            記録・診断・レポート・壁打ちの会話履歴をダウンロードできます
           </Text>
         </View>
 

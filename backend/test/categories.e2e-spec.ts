@@ -45,26 +45,9 @@ describe('Categories (e2e)', () => {
     expect(profileRows[0].plan).toBe('free');
   });
 
-  it('freeプランのユーザーはカスタムカテゴリを作成できない（Pro限定機能）', async () => {
-    const user = makeTestUser();
-    createdUserIds.push(user.id);
-
-    // プロフィール行を用意する（free）
-    const presetId = await firstPresetId();
-    await request(app.getHttpServer())
-      .post('/api/categories/bulk')
-      .set(authHeaders(user))
-      .send({ presetIds: [presetId] })
-      .expect(201);
-
-    await request(app.getHttpServer())
-      .post('/api/categories')
-      .set(authHeaders(user))
-      .send({ name: 'テストカテゴリ', parentName: 'テスト', color: '#000000' })
-      .expect(403);
-  });
-
-  it('Proプランのユーザーはカスタムカテゴリを自由な名前・グループで作成できる', async () => {
+  // 柱を自分の言葉で書けることは新しいモデルの根幹なので Free でも使える
+  // （07 P-10、10-pricing-b2b.md §2.3「柱（3型・承認）」は Free ○）
+  it('freeプランのユーザーも柱を自由な名前・型で作成できる', async () => {
     const user = makeTestUser();
     createdUserIds.push(user.id);
 
@@ -74,20 +57,38 @@ describe('Categories (e2e)', () => {
       .set(authHeaders(user))
       .send({ presetIds: [presetId] })
       .expect(201);
-    await dataSource.query("UPDATE profiles SET plan = 'pro' WHERE id = $1", [user.id]);
 
     const res = await request(app.getHttpServer())
       .post('/api/categories')
       .set(authHeaders(user))
-      .send({ name: '推し活', parentName: '推し', color: '#E84393' })
+      .send({ name: '木曜のバンド', parentName: '居場所', color: '#E84393', kind: 'place', importance: 3 })
       .expect(201);
 
     expect(res.body).toMatchObject({
       userId: user.id,
-      name: '推し活',
-      parentName: '推し',
-      color: '#E84393',
+      name: '木曜のバンド',
+      kind: 'place',
+      importance: 3,
       isPreset: false,
     });
+
+    const profileRows = await dataSource.query('SELECT plan FROM profiles WHERE id = $1', [user.id]);
+    expect(profileRows[0].plan).toBe('free');
+  });
+
+  it('プリセット由来の柱には kind が引き継がれる（「人」グループは relation）', async () => {
+    const user = makeTestUser();
+    createdUserIds.push(user.id);
+
+    const presets = await request(app.getHttpServer()).get('/api/categories/presets').expect(200);
+    const hito = presets.body.find((p: { parentName: string }) => p.parentName === '人');
+    expect(hito.kind).toBe('relation');
+
+    const res = await request(app.getHttpServer())
+      .post('/api/categories/bulk')
+      .set(authHeaders(user))
+      .send({ presetIds: [hito.id] })
+      .expect(201);
+    expect(res.body[0].kind).toBe('relation');
   });
 });

@@ -7,6 +7,14 @@ import { FluctuationEvent } from './fluctuation-event.entity';
 import { CreateRecordDto } from './dto/create-record.dto';
 import { CreateFluctuationDto } from './dto/create-fluctuation.dto';
 import { Category } from '../categories/category.entity';
+import { SafetyService } from '../common/safety/safety.service';
+import { HotlineView, SafetyVerdict } from '../common/safety/safety.types';
+
+export interface SaveFluctuationResult {
+  event: FluctuationEvent;
+  safetyVerdict: SafetyVerdict;
+  hotlines: HotlineView[];
+}
 
 export interface RecordFeedback {
   todaysPillars: number;
@@ -29,6 +37,7 @@ export class RecordsService {
     private readonly fluctuationRepo: Repository<FluctuationEvent>,
     @InjectRepository(Category)
     private readonly categoryRepo: Repository<Category>,
+    private readonly safety: SafetyService,
   ) {}
 
   /** 他ユーザーのカテゴリIDを記録・揺らぎに紐付けられないようにする */
@@ -132,7 +141,7 @@ export class RecordsService {
     });
   }
 
-  async createFluctuation(userId: string, dto: CreateFluctuationDto): Promise<FluctuationEvent> {
+  async createFluctuation(userId: string, dto: CreateFluctuationDto): Promise<SaveFluctuationResult> {
     if (dto.categoryId) {
       await this.assertCategoriesOwned(userId, [dto.categoryId]);
     }
@@ -145,10 +154,23 @@ export class RecordsService {
       note: dto.note ?? null,
     });
     const saved = await this.fluctuationRepo.save(event);
-    return this.fluctuationRepo.findOneOrFail({
+    const withRelations = await this.fluctuationRepo.findOneOrFail({
       where: { id: saved.id },
       relations: { category: true },
     });
+
+    // 「心が揺れた出来事」欄の安全性判定（03 §2.3）。block でも保存自体は拒否しない
+    let safetyVerdict: SafetyVerdict = 'clear';
+    let hotlines: HotlineView[] = [];
+    if (dto.note) {
+      const evaluation = await this.safety.evaluate(dto.note, 'fluctuation_note', userId);
+      safetyVerdict = evaluation.verdict;
+      if (evaluation.verdict !== 'clear') {
+        hotlines = await this.safety.getHotlines(evaluation.category);
+      }
+    }
+
+    return { event: withRelations, safetyVerdict, hotlines };
   }
 
   async deleteFluctuation(userId: string, id: string): Promise<void> {

@@ -4,9 +4,10 @@ import { Profile } from './profile.entity';
 import { ProfileService } from './profile.service';
 import { ProfileController } from './profile.controller';
 import { PaymentsModule } from '../payments/payments.module';
+import { PairModule } from '../pair/pair.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Profile]), PaymentsModule],
+  imports: [TypeOrmModule.forFeature([Profile]), PaymentsModule, PairModule],
   providers: [ProfileService],
   controllers: [ProfileController],
   exports: [ProfileService],

@@ -27,8 +27,5 @@ export const LANDING_CHIPS: LandingChip[] = [
 
 /** この割合以上を1つが占めたら「揺らいだら…？」の問いかけを出す */
 export const TOP_SHARE_THRESHOLD = 55;
-/** この本数以下なら「もう1本」の提案を出す */
+/** これ以下なら「ほかにも頼れる先があると」と添える。目標値としては提示しない（07 P-04） */
 export const FEW_PILLARS_THRESHOLD = 2;
-/** バランス良好と見なす本数と最大シェア */
-export const BALANCED_PILLARS = 4;
-export const BALANCED_TOP_SHARE = 40;

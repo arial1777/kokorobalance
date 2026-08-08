@@ -4,7 +4,7 @@ import { PricingClient } from './pricing-client';
 
 const TITLE = '料金プラン | ココロバランス';
 const DESCRIPTION =
-  'ココロバランスの料金プランをご紹介。無料プランでも心のポートフォリオや週間レポートなど基本機能が使えます。Proプラン（月額330円）ではAIコーチが無制限に。';
+  'ココロバランスの料金プランをご紹介。無料プランでも心のポートフォリオや週間レポートなど基本機能が使えます。Proプラン（月額330円）では壁打ちがいつでも使えます。';
 
 export const metadata: Metadata = {
   title: TITLE,

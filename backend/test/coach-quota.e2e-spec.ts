@@ -30,15 +30,13 @@ describe('Coach quota (e2e)', () => {
     return user;
   }
 
-  it('無料プランは月3回までで、4回目はQUOTA_EXCEEDEDになる', async () => {
+  it('無料プランは1日1往復までで、2回目はQUOTA_EXCEEDEDになる', async () => {
     const user = await setupUser('free');
-    for (let i = 0; i < 3; i++) {
-      await request(app.getHttpServer())
-        .post('/api/coach/chat')
-        .set(authHeaders(user))
-        .send({ message: `テストメッセージ${i}` })
-        .expect(201);
-    }
+    await request(app.getHttpServer())
+      .post('/api/coach/chat')
+      .set(authHeaders(user))
+      .send({ message: 'テストメッセージ' })
+      .expect(201);
 
     await request(app.getHttpServer())
       .post('/api/coach/chat')
@@ -47,14 +45,16 @@ describe('Coach quota (e2e)', () => {
       .expect(403);
   });
 
-  it('Proプランは無制限ではなく月100回で打ち止めになる（コスト超過防止のソフトキャップ）', async () => {
+  it('Proプランは無制限ではなく1日100回で打ち止めになる（コスト超過防止のソフトキャップ）', async () => {
     const user = await setupUser('pro');
-    const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date()).slice(0, 7);
+    const now = new Date();
     // 100回分の実チャットは重いため、99回分をDBに直接投入して境界だけをまたぐ
-    await dataSource.query(
-      `INSERT INTO ai_usage (user_id, month, chat_count) VALUES ($1, $2, 99)`,
-      [user.id, month],
-    );
+    for (let i = 0; i < 99; i++) {
+      await dataSource.query(
+        `INSERT INTO ai_coach_messages (user_id, role, content, created_at) VALUES ($1, 'user', $2, $3)`,
+        [user.id, `シード${i}`, now],
+      );
+    }
 
     const quotaBefore = await request(app.getHttpServer())
       .get('/api/coach/quota')
@@ -79,5 +79,14 @@ describe('Coach quota (e2e)', () => {
       .set(authHeaders(user))
       .send({ message: '101回目のはず、拒否されるべき' })
       .expect(403);
+  });
+
+  it('quotaはisShakeTodayを含む', async () => {
+    const user = await setupUser('free');
+    const res = await request(app.getHttpServer())
+      .get('/api/coach/quota')
+      .set(authHeaders(user))
+      .expect(200);
+    expect(res.body).toMatchObject({ plan: 'free', limit: 1, used: 0, remaining: 1, isShakeToday: false });
   });
 });

@@ -60,9 +60,9 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-bold mb-2">第6条（AIコーチ機能）</h2>
+            <h2 className="font-bold mb-2">第6条（壁打ち機能）</h2>
             <p>
-              AIコーチはAI（大規模言語モデル）による自動応答であり、その内容の正確性・有用性を保証するものではありません。
+              壁打ちはAI（大規模言語モデル）による自動応答であり、その内容の正確性・有用性を保証するものではありません。
               医療上・人生上の重要な判断には利用しないでください。
               つらい気持ちが続くときは、<Link href="/support-resources" className="text-accent hover:underline">相談窓口</Link>にご相談ください。
             </p>

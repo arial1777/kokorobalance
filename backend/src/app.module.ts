@@ -15,6 +15,9 @@ import { PaymentsModule } from './payments/payments.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ShakeModule } from './shake/shake.module';
+import { WeeklyCheckModule } from './weekly-check/weekly-check.module';
+import { PairModule } from './pair/pair.module';
 
 @Module({
   imports: [
@@ -45,6 +48,9 @@ import { NotificationsModule } from './notifications/notifications.module';
     OnboardingModule,
     AnalyticsModule,
     NotificationsModule,
+    ShakeModule,
+    WeeklyCheckModule,
+    PairModule,
   ],
   controllers: [AppController],
   providers: [AppService],

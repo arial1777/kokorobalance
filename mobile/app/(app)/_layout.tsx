@@ -52,6 +52,13 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="shake"
+        options={{
+          title: '揺れ予報',
+          tabBarIcon: ({ color, focused }) => <Icon name="thunderstorm" color={color as string} filled={focused} size={24} />,
+        }}
+      />
+      <Tabs.Screen
         name="portfolio"
         options={{
           title: 'ポートフォリオ',

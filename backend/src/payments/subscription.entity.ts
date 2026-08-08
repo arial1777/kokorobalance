@@ -34,6 +34,10 @@ export class Subscription {
   @Column({ length: 20, default: 'pro' })
   plan: string;
 
+  /** 課金の期間。年額比率（10 §5）の集計元 */
+  @Column({ name: 'plan_interval', type: 'varchar', length: 10, nullable: true })
+  planInterval: 'month' | 'annual' | null;
+
   @Column({ name: 'current_period_start', type: 'timestamptz', nullable: true })
   currentPeriodStart: Date | null;
 

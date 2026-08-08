@@ -6,6 +6,7 @@
  * otherwise it will silently fail to render (the glyph won't be in the downloaded font subset).
  */
 export const USED_ICON_NAMES = [
+  'add',
   'air',
   'arrow_back',
   'arrow_downward',
@@ -21,6 +22,7 @@ export const USED_ICON_NAMES = [
   'close',
   'delete_forever',
   'description',
+  'diversity_3',
   'donut_large',
   'download',
   'edit',
@@ -55,6 +57,7 @@ export const USED_ICON_NAMES = [
   'smart_toy',
   'spa',
   'star',
+  'thunderstorm',
   'visibility',
   'warning',
   'water_drop',

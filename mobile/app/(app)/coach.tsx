@@ -16,7 +16,8 @@ import { api } from '@/lib/api';
 import { track } from '@/lib/analytics';
 import { Icon } from '@/components/ui/icon';
 import { AppHeader } from '@/components/ui/app-header';
-import type { AiCoachMessage, ChatResult, CoachQuota, Profile } from '@/types';
+import { SafetyResourceCard } from '@/components/safety-resource-card';
+import type { AiCoachMessage, ChatResult, CoachQuota, HotlineView, Profile } from '@/types';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://kokorobalance.example.com';
 
@@ -26,7 +27,22 @@ export default function CoachPage() {
   const [input, setInput] = useState('');
   const [consentOpen, setConsentOpen] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [hotlinesByMessageId, setHotlinesByMessageId] = useState<Record<string, HotlineView[]>>({});
+  const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
+
+  // 履歴表示（safetyVerdictはあるがhotlinesを持たない過去メッセージ）用の一般窓口一覧
+  const { data: generalHotlines = [] } = useQuery<HotlineView[]>({
+    queryKey: ['safety-hotlines', 'general'],
+    queryFn: () => api.get<HotlineView[]>('/safety/hotlines'),
+  });
+
+  const reportMutation = useMutation({
+    mutationFn: (messageId: string) => api.post(`/coach/messages/${messageId}/report`),
+    onSuccess: (_data, messageId) => {
+      setReportedIds((prev) => new Set(prev).add(messageId));
+    },
+  });
 
   const { data: profile } = useQuery<Profile>({
     queryKey: ['profile'],
@@ -45,9 +61,12 @@ export default function CoachPage() {
 
   const chatMutation = useMutation({
     mutationFn: (message: string) => api.post<ChatResult>('/coach/chat', { message }),
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['coach-messages'] });
       qc.invalidateQueries({ queryKey: ['coach-quota'] });
+      if (result.hotlines.length > 0) {
+        setHotlinesByMessageId((prev) => ({ ...prev, [result.messageId]: result.hotlines }));
+      }
       track('coach_chat_sent');
       setInput('');
     },
@@ -102,15 +121,17 @@ export default function CoachPage() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 bg-background">
       <AppHeader
-        title="AIコーチ"
-        subtitle="心のバランス相談"
+        title="壁打ち"
+        subtitle="考えを整理する"
         right={
           <View className="flex-row items-center gap-2">
             {quota &&
               (isFree ? (
-                <View className="rounded-full bg-secondary px-2.5 py-1">
-                  <Text className="text-[11px] font-semibold text-muted-foreground">今月あと{quota.remaining}回</Text>
-                </View>
+                quota.isShakeToday && (
+                  <View className="rounded-full bg-sky-50 px-2.5 py-1">
+                    <Text className="text-[11px] font-semibold text-sky-700">今日は無制限</Text>
+                  </View>
+                )
               ) : (
                 <View className="rounded-full bg-accent/10 px-2.5 py-1">
                   <Text className="text-[11px] font-semibold text-accent">Pro</Text>
@@ -136,29 +157,47 @@ export default function CoachPage() {
             <View className="mb-3 h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
               <Icon name="smart_toy" filled size={28} color="#1A3352" />
             </View>
-            <Text className="text-sm text-muted-foreground">何でも話しかけてください</Text>
-            {isFree && quota && (
-              <Text className="mt-2 text-xs text-muted-foreground">無料プランでは月{quota.limit}回まで話せます</Text>
-            )}
+            <Text className="text-sm text-muted-foreground">なんでも書いてください。まとまっていなくて大丈夫です。</Text>
           </View>
         )}
-        {messages.map((msg) => (
-          <View key={msg.id} className={`flex-row ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <View
-              className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
-                msg.role === 'user'
-                  ? 'rounded-br-sm bg-primary'
-                  : msg.isCrisis
-                    ? 'rounded-bl-sm border border-sky-200 bg-sky-50 shadow-sm'
-                    : 'rounded-bl-sm border border-border bg-white shadow-sm'
-              }`}
-            >
-              <Text className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-foreground'}`}>
-                {msg.content}
-              </Text>
+        {messages.map((msg) => {
+          const hotlines = hotlinesByMessageId[msg.id] ?? (msg.safetyVerdict !== 'clear' ? generalHotlines : []);
+          const isBlock = msg.role === 'assistant' && msg.safetyVerdict === 'block';
+          const isReported = reportedIds.has(msg.id) || !!msg.reportedOffBaseAt;
+          return (
+            <View key={msg.id} className={`${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+              {isBlock ? (
+                <SafetyResourceCard variant="block" hotlines={hotlines} />
+              ) : (
+                <View
+                  className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                    msg.role === 'user'
+                      ? 'rounded-br-sm bg-primary'
+                      : 'rounded-bl-sm border border-border bg-white shadow-sm'
+                  }`}
+                >
+                  <Text className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-foreground'}`}>
+                    {msg.content}
+                  </Text>
+                </View>
+              )}
+              {msg.role === 'assistant' && msg.safetyVerdict === 'caution' && (
+                <SafetyResourceCard variant="caution" hotlines={hotlines} />
+              )}
+              {msg.role === 'assistant' && !isBlock && (
+                <Pressable
+                  onPress={() => reportMutation.mutate(msg.id)}
+                  disabled={isReported || reportMutation.isPending}
+                  className="mt-1"
+                >
+                  <Text className={`text-[10px] ${isReported ? 'text-muted-foreground/40' : 'text-muted-foreground/60'}`}>
+                    {isReported ? '報告しました' : 'この返信は的外れ／つらかった'}
+                  </Text>
+                </Pressable>
+              )}
             </View>
-          </View>
-        ))}
+          );
+        })}
         {chatMutation.isPending && (
           <View className="flex-row justify-start">
             <View className="rounded-2xl rounded-bl-sm border border-border bg-white px-4 py-2.5 shadow-sm">
@@ -169,15 +208,15 @@ export default function CoachPage() {
 
         {exhausted && (
           <View className="items-center rounded-2xl border border-border bg-white p-5 shadow-sm">
-            <Text className="mb-1 text-sm font-semibold text-foreground">今月の無料分を使い切りました</Text>
-            <Text className="mb-3 text-center text-xs leading-relaxed text-muted-foreground">
-              Proプランなら回数無制限で、週間レポートのAIコメントも読めます
-            </Text>
-            <Pressable
-              onPress={() => router.push('/paywall')}
-              className="rounded-xl bg-accent px-5 py-2.5 shadow-sm"
-            >
-              <Text className="text-sm font-semibold text-white">Proプランを見る</Text>
+            <Text className="mb-1 text-sm font-semibold text-foreground">今日はここまでです。</Text>
+            <Text className="mb-3 text-xs text-muted-foreground">また明日、話しましょう。</Text>
+            {generalHotlines.length > 0 && (
+              <View className="w-full">
+                <SafetyResourceCard variant="caution" hotlines={generalHotlines} />
+              </View>
+            )}
+            <Pressable onPress={() => router.push('/paywall')} className="mt-3">
+              <Text className="text-[11px] text-muted-foreground">Pro なら、いつでも話せます →</Text>
             </Pressable>
           </View>
         )}
@@ -188,7 +227,7 @@ export default function CoachPage() {
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder={exhausted ? '今月の無料分を使い切りました' : '今日の気持ちを話してみて...'}
+            placeholder={exhausted ? '今日はここまでです' : 'いま思っていることを、そのまま'}
             editable={!exhausted}
             placeholderTextColor="#6B584880"
             className="flex-1 px-2 text-sm text-foreground"
@@ -205,7 +244,7 @@ export default function CoachPage() {
           </Pressable>
         </View>
         <Text className="mt-1.5 text-center text-[10px] leading-relaxed text-muted-foreground">
-          AIコーチは医療行為・診断ではありません。つらいときは{' '}
+          壁打ちは医療行為・診断ではありません。つらいときは{' '}
           <Text className="text-accent" onPress={() => WebBrowser.openBrowserAsync(`${WEB_URL}/support-resources`)}>
             相談窓口
           </Text>
@@ -219,16 +258,19 @@ export default function CoachPage() {
             <View className="mb-4 h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
               <Icon name="shield" filled size={24} color="#1A3352" />
             </View>
-            <Text className="mb-2 text-lg font-bold text-foreground">AIコーチを始める前に</Text>
+            <Text className="mb-2 text-lg font-bold text-foreground">壁打ちを始める前に</Text>
+            <Text className="mb-3 text-sm leading-relaxed text-muted-foreground">
+              これは医療でも診断でもありません。つらいときに頼れる窓口は、いつでもここから見られます。
+            </Text>
             <Text className="mb-4 text-sm leading-relaxed text-muted-foreground">
-              AIコーチとの会話内容と、あなたの心のデータ（ポートフォリオ・柱・揺らぎ）は、応答生成のためにAI（Google
+              壁打ちでの会話内容と、あなたの心のデータ（ポートフォリオ・柱・揺らぎ）は、応答生成のためにAI（Google
               Cloud上のGemini）へ送信されます。
             </Text>
             <View className="mb-5 gap-1.5">
               <Text className="text-xs leading-relaxed text-muted-foreground">
                 ・データが広告や第三者提供に使われることはありません
               </Text>
-              <Text className="text-xs leading-relaxed text-muted-foreground">・AIコーチは医療行為・診断を行いません</Text>
+              <Text className="text-xs leading-relaxed text-muted-foreground">・壁打ちは医療行為・診断を行いません</Text>
               <Text className="text-xs leading-relaxed text-muted-foreground">・同意はいつでも設定から取り消せます</Text>
             </View>
             <View className="flex-row gap-2">

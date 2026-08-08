@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -9,10 +9,14 @@ import { Subscription } from './subscription.entity';
 import { Profile } from '../profile/profile.entity';
 import { AnalyticsService } from '../analytics/analytics.service';
 
+/** 課金の期間（10-pricing-b2b.md §2.2 案A: 月額¥330据え置き＋年額¥2,980追加） */
+export type PlanInterval = 'month' | 'annual';
+
 @Injectable()
 export class PaymentsService {
   private readonly stripe: Stripe;
-  private readonly priceId: string;
+  private readonly monthlyPriceId: string;
+  private readonly annualPriceId: string;
 
   constructor(
     @InjectRepository(Subscription)
@@ -23,18 +27,41 @@ export class PaymentsService {
     config: ConfigService,
   ) {
     this.stripe = new Stripe(config.get<string>('STRIPE_SECRET_KEY')!);
-    this.priceId = config.get<string>('STRIPE_PRO_PRICE_ID') ?? '';
+    this.monthlyPriceId = config.get<string>('STRIPE_PRO_PRICE_ID') ?? '';
+    this.annualPriceId = config.get<string>('STRIPE_PRO_ANNUAL_PRICE_ID') ?? '';
   }
 
-  async createCheckoutSession(userId: string, email: string): Promise<{ url: string }> {
+  /**
+   * 購入できるプランを返す。年額のPriceが未設定なら年額導線を出さない。
+   * 380日継続率は年額19.9% vs 月額14.2%（E-13）なので年額を既定にする（M-A-01）。
+   */
+  getPlans(): { intervals: PlanInterval[]; defaultInterval: PlanInterval } {
+    const intervals: PlanInterval[] = [];
+    if (this.annualPriceId) intervals.push('annual');
+    if (this.monthlyPriceId) intervals.push('month');
+    return { intervals, defaultInterval: intervals[0] ?? 'month' };
+  }
+
+  async createCheckoutSession(
+    userId: string,
+    email: string,
+    interval?: PlanInterval,
+  ): Promise<{ url: string }> {
+    // 省略時は年額を既定にする（年額主導線）
+    const resolved = interval ?? this.getPlans().defaultInterval;
+    const price = resolved === 'annual' ? this.annualPriceId : this.monthlyPriceId;
+    if (!price) {
+      throw new BadRequestException('このプランは現在購入できません');
+    }
+
     const session = await this.stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
       customer_email: email,
-      line_items: [{ price: this.priceId, quantity: 1 }],
+      line_items: [{ price, quantity: 1 }],
       success_url: `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/pricing`,
-      metadata: { userId },
+      metadata: { userId, interval: resolved },
     });
     return { url: session.url! };
   }
@@ -93,6 +120,8 @@ export class PaymentsService {
     const item = (stripeSub as any).items?.data?.[0];
     const periodStart = item?.current_period_start ?? (stripeSub as any).current_period_start;
     const periodEnd = item?.current_period_end ?? (stripeSub as any).current_period_end;
+    // 年額比率（10 §5）を集計できるようにStripe側の実際の請求周期から判定する
+    const planInterval: PlanInterval = item?.price?.recurring?.interval === 'year' ? 'annual' : 'month';
 
     await this.subRepo.save(
       this.subRepo.create({
@@ -101,14 +130,16 @@ export class PaymentsService {
         stripeSubscriptionId: stripeSub.id,
         status: stripeSub.status as any,
         plan: 'pro',
+        planInterval,
         currentPeriodStart: periodStart ? new Date(periodStart * 1000) : null,
         currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
       }),
     );
     await this.profileRepo.update(userId, { plan: 'pro' });
-    // KPI: Free→Pro転換（v2 §10.3）
+    // KPI: Free→Pro転換（v2 §10.3）。本文や識別子以外の情報は載せない（11 ME-01）
     await this.analytics.track(userId, 'checkout_completed', {
       subscriptionId: stripeSub.id,
+      interval: planInterval,
     });
   }
 

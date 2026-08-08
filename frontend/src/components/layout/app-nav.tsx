@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/icon';
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'ホーム', icon: 'home' },
   { href: '/record', label: '記録', icon: 'edit' },
+  { href: '/shake', label: '揺れ予報', icon: 'thunderstorm' },
   { href: '/portfolio', label: 'ポートフォリオ', icon: 'donut_large' },
   { href: '/report', label: 'レポート', icon: 'description' },
 ];

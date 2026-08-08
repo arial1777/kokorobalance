@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Request, UseGuards } from '@nestjs/common';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { CoachService } from './coach.service';
 import { ChatDto } from './dto/chat.dto';
@@ -26,5 +26,10 @@ export class CoachController {
   @Post('reset')
   resetThread(@Request() req: any) {
     return this.service.resetThread(req.user.id);
+  }
+
+  @Post('messages/:id/report')
+  reportOffBase(@Request() req: any, @Param('id') id: string) {
+    return this.service.reportOffBase(req.user.id, id);
   }
 }

@@ -1,5 +1,11 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/icon';
+
+/** 決済完了後にだけ意味を持つページ。検索結果に出す価値がないので索引対象から外す。 */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default function PricingSuccessPage() {
   return (
@@ -10,13 +16,13 @@ export default function PricingSuccessPage() {
         </div>
         <h1 className="text-2xl font-bold text-foreground mb-2">Proプランへようこそ！</h1>
         <p className="text-muted-foreground text-sm mb-8 leading-relaxed">
-          AIコーチを含む全機能がご利用いただけます。
+          壁打ちを含む全機能がご利用いただけます。
         </p>
         <Link
           href="/coach"
           className="inline-flex items-center gap-2 px-6 py-3 bg-accent text-white font-semibold rounded-xl hover:bg-[#c94d30] transition shadow-sm shadow-accent/20 text-sm"
         >
-          AIコーチを使ってみる
+          壁打ちを使ってみる
           <Icon name="chevron_right" className="text-lg" />
         </Link>
       </div>

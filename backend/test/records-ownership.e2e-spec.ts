@@ -80,6 +80,6 @@ describe('Records ownership (e2e)', () => {
       .send({ occurredDate: '2026-01-01', categoryId: attackerCategoryId, magnitude: 'small' })
       .expect(201);
 
-    expect(res.body.categoryId).toBe(attackerCategoryId);
+    expect(res.body.event.categoryId).toBe(attackerCategoryId);
   });
 });

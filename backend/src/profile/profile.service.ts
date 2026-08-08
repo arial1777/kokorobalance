@@ -5,6 +5,7 @@ import { DataSource, Repository } from 'typeorm';
 import { Profile } from './profile.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { PaymentsService } from '../payments/payments.service';
+import { PairService } from '../pair/pair.service';
 
 @Injectable()
 export class ProfileService {
@@ -15,6 +16,7 @@ export class ProfileService {
     private readonly ds: DataSource,
     private readonly config: ConfigService,
     private readonly payments: PaymentsService,
+    private readonly pairs: PairService,
   ) {}
 
   async findOrCreate(userId: string, email: string): Promise<Profile> {
@@ -24,6 +26,8 @@ export class ProfileService {
         id: userId,
         nickname: email.split('@')[0],
         email,
+        // 新規ユーザーは旧モデルを経験していないので、柱の移行通知（07 §5）は出さない
+        pillarNoticeDismissedAt: new Date(),
       });
       await this.repo.save(profile);
       // KPI: 登録完了（プロフィール初回作成 = サインアップ完了。v2 §10.1）
@@ -43,8 +47,10 @@ export class ProfileService {
     await this.repo.update(userId, {
       ...(dto.nickname && { nickname: dto.nickname }),
       ...(dto.reminderTime !== undefined && { reminderTime: dto.reminderTime }),
-      ...(dto.suggestionMuted !== undefined && { suggestionMuted: dto.suggestionMuted }),
       ...(dto.emailReminderEnabled !== undefined && { emailReminderEnabled: dto.emailReminderEnabled }),
+      ...(dto.safetyReviewOptOut !== undefined && { safetyReviewOptOut: dto.safetyReviewOptOut }),
+      ...(dto.pillarNoticeDismissed && { pillarNoticeDismissedAt: new Date() }),
+      ...(dto.analyticsOptOut !== undefined && { analyticsOptOut: dto.analyticsOptOut }),
     });
     return this.repo.findOneOrFail({ where: { id: userId } });
   }
@@ -134,6 +140,10 @@ export class ProfileService {
    */
   async deleteAccount(userId: string): Promise<void> {
     await this.payments.cancelSubscriptionForDeletedUser(userId);
+
+    // ペアを先に閉じて相手に知らせる（09 E-04）。CASCADE削除に任せると相手には
+    // 黙ってペアが消えるだけになる。退会の事実そのものは伝えない
+    await this.pairs.endPairsForDeletedUser(userId);
 
     const supabaseUrl = this.config.get<string>('SUPABASE_URL');
     const serviceRoleKey = this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY');

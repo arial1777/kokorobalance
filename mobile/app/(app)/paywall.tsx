@@ -9,14 +9,27 @@ import { getCurrentOffering, isProEntitled, restorePurchases } from '@/lib/purch
 import { toast } from '@/store/toast';
 import { Icon } from '@/components/ui/icon';
 import { AppHeader } from '@/components/ui/app-header';
+import { ProLimitations } from '@/components/pro-limitations';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://kokorobalance.example.com';
 
+// Pro は「深さ」を売る（10-pricing-b2b.md §2.3）。柱の登録は Free でも全機能使えるので特典に含めない
 const BENEFITS = [
-  'AIコーチと無制限に会話できる',
+  '壁打ちがいつでも使える',
   '週間レポートのAIコメントを毎週読める',
-  'プリセットにない自分だけのカテゴリを追加できる',
+  '揺れる日の前に、AIが気持ちを整理してくれる',
+  'ふりかえりを、AIが言葉にしてくれる',
 ];
+
+/**
+ * 年額を先頭に並べる（10-pricing-b2b.md M-A-01）。
+ * 380日継続率は年額19.9% vs 月額14.2%（E-13）なので、年額を既定の選択肢として上に置く。
+ */
+function sortAnnualFirst(packages: PurchasesPackage[]): PurchasesPackage[] {
+  const isAnnual = (p: PurchasesPackage) =>
+    /annual|year/i.test(p.identifier) || /P1Y/i.test(p.product.subscriptionPeriod ?? '');
+  return [...packages].sort((a, b) => Number(isAnnual(b)) - Number(isAnnual(a)));
+}
 
 async function waitForProSync(qc: ReturnType<typeof useQueryClient>) {
   for (let i = 0; i < 5; i++) {
@@ -38,7 +51,7 @@ export default function PaywallPage() {
 
   useEffect(() => {
     getCurrentOffering()
-      .then((offering) => setPackages(offering?.availablePackages ?? []))
+      .then((offering) => setPackages(sortAnnualFirst(offering?.availablePackages ?? [])))
       .catch(() => setPackages([]))
       .finally(() => setLoading(false));
   }, []);
@@ -142,6 +155,9 @@ export default function PaywallPage() {
             現在ご購入いただけるプランがありません。時間をおいて再度お試しください
           </Text>
         )}
+
+        {/* 課金前に制限を先に書く（M-A-02） */}
+        <ProLimitations />
 
         <Pressable onPress={handleRestore} disabled={restoring || purchasingId !== null} className="items-center py-2">
           {restoring ? (

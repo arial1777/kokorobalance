@@ -143,7 +143,7 @@ export default async function BlogPostPage({ params }: { params: Promise<Params>
         </div>
         <h1 className="text-2xl md:text-3xl font-bold text-foreground mt-2">{title}</h1>
       </div>
-      <ArticleLayout headings={headings} faqs={faqs} relatedPosts={relatedPosts}>
+      <ArticleLayout headings={headings} faqs={faqs} relatedPosts={relatedPosts} shareUrl={url} shareTitle={title}>
         <MDXRemote
           source={post.content}
           components={mdxComponents}

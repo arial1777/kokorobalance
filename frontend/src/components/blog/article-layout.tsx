@@ -5,17 +5,22 @@ import { TableOfContents } from './toc';
 import { AuthorBox } from './author-box';
 import { FAQSection } from './faq-section';
 import { RelatedPosts } from './related-posts';
+import { ShareButtons } from './share-buttons';
 
 export function ArticleLayout({
   children,
   headings = [],
   faqs = [],
   relatedPosts = [],
+  shareUrl,
+  shareTitle,
 }: {
   children: React.ReactNode;
   headings?: Heading[];
   faqs?: PostFaq[];
   relatedPosts?: BlogPost[];
+  shareUrl: string;
+  shareTitle: string;
 }) {
   return (
     <article className="max-w-3xl mx-auto px-4 md:px-8 pb-16">
@@ -26,6 +31,7 @@ export function ArticleLayout({
       </div>
 
       <FAQSection faqs={faqs} />
+      <ShareButtons url={shareUrl} title={shareTitle} />
       <RelatedPosts posts={relatedPosts} />
       <AuthorBox />
 
